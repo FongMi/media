@@ -161,7 +161,7 @@ public final class DefaultExtractorsFactory implements ExtractorsFactory {
     tsMode = TsExtractor.MODE_SINGLE_PMT;
     tsTimestampSearchBytes = TsExtractor.DEFAULT_TIMESTAMP_SEARCH_BYTES;
     subtitleParserFactory = new DefaultSubtitleParserFactory();
-    textTrackTranscodingEnabled = true;
+    textTrackTranscodingEnabled = false;
   }
 
   /**
