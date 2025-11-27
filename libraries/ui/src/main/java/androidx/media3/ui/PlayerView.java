@@ -299,7 +299,7 @@ public class PlayerView extends FrameLayout implements AdViewProvider {
   private final ComponentListener componentListener;
   @Nullable private final AspectRatioFrameLayout contentFrame;
   @Nullable private final View shutterView;
-  @Nullable private final View surfaceView;
+  @Nullable private View surfaceView;
   private final boolean surfaceViewIgnoresVideoAspectRatio;
   @Nullable private final SurfaceSyncGroupCompatV34 surfaceSyncGroupV34;
   @Nullable private final ImageView imageView;
@@ -599,6 +599,22 @@ public class PlayerView extends FrameLayout implements AdViewProvider {
       setClickable(true);
     }
     updateContentDescription();
+  }
+
+  public void setRender(int render) {
+    if (contentFrame != null && surfaceView != null) {
+      contentFrame.removeView(surfaceView);
+    }
+    if (render == 1) {
+      surfaceView = new TextureView(getContext());
+    } else {
+      SurfaceView view = new SurfaceView(getContext());
+      if (SDK_INT >= 34) Api34.setSurfaceLifecycleToFollowsAttachment(view);
+      surfaceView = view;
+    }
+    surfaceView.setClickable(false);
+    surfaceView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    if (contentFrame != null) contentFrame.addView(surfaceView, 0);
   }
 
   /**
