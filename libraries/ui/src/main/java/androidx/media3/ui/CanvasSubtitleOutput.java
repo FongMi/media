@@ -41,6 +41,7 @@ import java.util.List;
   private float textSize;
   private CaptionStyleCompat style;
   private float bottomPaddingFraction;
+  private float bottomPosition;
 
   public CanvasSubtitleOutput(Context context) {
     this(context, /* attrs= */ null);
@@ -54,6 +55,7 @@ import java.util.List;
     textSize = DEFAULT_TEXT_SIZE_FRACTION;
     style = CaptionStyleCompat.DEFAULT;
     bottomPaddingFraction = DEFAULT_BOTTOM_PADDING_FRACTION;
+    bottomPosition = 0;
   }
 
   @Override
@@ -62,12 +64,14 @@ import java.util.List;
       CaptionStyleCompat style,
       float textSize,
       @Cue.TextSizeType int textSizeType,
-      float bottomPaddingFraction) {
+      float bottomPaddingFraction,
+      float bottomPosition) {
     this.cues = cues;
     this.style = style;
     this.textSize = textSize;
     this.textSizeType = textSizeType;
     this.bottomPaddingFraction = bottomPaddingFraction;
+    this.bottomPosition = bottomPosition;
     // Ensure we have sufficient painters.
     while (painters.size() < cues.size()) {
       painters.add(new SubtitlePainter(getContext()));
@@ -120,6 +124,7 @@ import java.util.List;
           defaultViewTextSizePx,
           cueTextSizePx,
           bottomPaddingFraction,
+          bottomPosition,
           canvas,
           left,
           top,

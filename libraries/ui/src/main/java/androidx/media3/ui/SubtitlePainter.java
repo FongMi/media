@@ -82,6 +82,7 @@ import org.checkerframework.checker.nullness.qual.RequiresNonNull;
   private float defaultTextSizePx;
   private float cueTextSizePx;
   private float bottomPaddingFraction;
+  private float bottomPosition;
   private int parentLeft;
   private int parentTop;
   private int parentRight;
@@ -149,6 +150,7 @@ import org.checkerframework.checker.nullness.qual.RequiresNonNull;
       float defaultTextSizePx,
       float cueTextSizePx,
       float bottomPaddingFraction,
+      float bottomPosition,
       Canvas canvas,
       int cueBoxLeft,
       int cueBoxTop,
@@ -182,6 +184,7 @@ import org.checkerframework.checker.nullness.qual.RequiresNonNull;
         && this.defaultTextSizePx == defaultTextSizePx
         && this.cueTextSizePx == cueTextSizePx
         && this.bottomPaddingFraction == bottomPaddingFraction
+        && this.bottomPosition == bottomPosition
         && this.parentLeft == cueBoxLeft
         && this.parentTop == cueBoxTop
         && this.parentRight == cueBoxRight
@@ -210,6 +213,7 @@ import org.checkerframework.checker.nullness.qual.RequiresNonNull;
     this.defaultTextSizePx = defaultTextSizePx;
     this.cueTextSizePx = cueTextSizePx;
     this.bottomPaddingFraction = bottomPaddingFraction;
+    this.bottomPosition = bottomPosition;
     this.parentLeft = cueBoxLeft;
     this.parentTop = cueBoxTop;
     this.parentRight = cueBoxRight;
@@ -357,6 +361,8 @@ import org.checkerframework.checker.nullness.qual.RequiresNonNull;
       textTop = parentBottom - textHeight - (int) (parentHeight * bottomPaddingFraction);
     }
 
+    textTop = textTop - (int) (parentHeight * bottomPosition);
+
     // Update the derived drawing variables.
     this.textLayout =
         new StaticLayout(
@@ -375,7 +381,7 @@ import org.checkerframework.checker.nullness.qual.RequiresNonNull;
     int parentWidth = parentRight - parentLeft;
     int parentHeight = parentBottom - parentTop;
     float anchorX = parentLeft + (parentWidth * cuePosition);
-    float anchorY = parentTop + (parentHeight * cueLine);
+    float anchorY = parentTop + (parentHeight * cueLine) - (parentHeight * bottomPosition);
     int width = Math.round(parentWidth * cueSize);
     int height =
         cueBitmapHeight != Cue.DIMEN_UNSET
