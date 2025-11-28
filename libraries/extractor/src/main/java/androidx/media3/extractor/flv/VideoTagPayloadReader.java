@@ -22,6 +22,7 @@ import androidx.media3.common.ParserException;
 import androidx.media3.common.util.ParsableByteArray;
 import androidx.media3.container.NalUnitUtil;
 import androidx.media3.extractor.AvcConfig;
+import androidx.media3.extractor.HevcConfig;
 import androidx.media3.extractor.TrackOutput;
 
 /** Parses video tags from an FLV stream and extracts H.264 nal units. */
@@ -29,6 +30,7 @@ import androidx.media3.extractor.TrackOutput;
 
   // Video codec.
   private static final int VIDEO_CODEC_AVC = 7;
+  private static final int VIDEO_CODEC_HEVC = 12;
 
   // Frame types.
   private static final int VIDEO_FRAME_KEYFRAME = 1;
@@ -47,6 +49,7 @@ import androidx.media3.extractor.TrackOutput;
   private boolean hasOutputFormat;
   private boolean hasOutputKeyframe;
   private int frameType;
+  private int videoCodec;
 
   /**
    * @param output A {@link TrackOutput} to which samples should be written.
@@ -68,7 +71,10 @@ import androidx.media3.extractor.TrackOutput;
     int frameType = (header >> 4) & 0x0F;
     int videoCodec = (header & 0x0F);
     // Support just H.264 encoded content.
-    if (videoCodec != VIDEO_CODEC_AVC) {
+    if (videoCodec == VIDEO_CODEC_AVC || videoCodec == VIDEO_CODEC_HEVC) {
+      this.videoCodec = videoCodec;
+    }
+    if (videoCodec != VIDEO_CODEC_AVC && videoCodec != VIDEO_CODEC_HEVC) {
       throw new UnsupportedFormatException("Video format not supported: " + videoCodec);
     }
     this.frameType = frameType;
@@ -85,20 +91,11 @@ import androidx.media3.extractor.TrackOutput;
     if (packetType == AVC_PACKET_TYPE_SEQUENCE_HEADER && !hasOutputFormat) {
       ParsableByteArray videoSequence = new ParsableByteArray(new byte[data.bytesLeft()]);
       data.readBytes(videoSequence.getData(), 0, data.bytesLeft());
-      AvcConfig avcConfig = AvcConfig.parse(videoSequence);
-      nalUnitLengthFieldLength = avcConfig.nalUnitLengthFieldLength;
-      // Construct and output the format.
-      Format format =
-          new Format.Builder()
-              .setContainerMimeType(MimeTypes.VIDEO_FLV)
-              .setSampleMimeType(MimeTypes.VIDEO_H264)
-              .setCodecs(avcConfig.codecs)
-              .setWidth(avcConfig.width)
-              .setHeight(avcConfig.height)
-              .setPixelWidthHeightRatio(avcConfig.pixelWidthHeightRatio)
-              .setInitializationData(avcConfig.initializationData)
-              .build();
-      output.format(format);
+      if (videoCodec == VIDEO_CODEC_AVC) {
+        outputAvc(videoSequence);
+      } else if (videoCodec == VIDEO_CODEC_HEVC) {
+        outputHevc(videoSequence);
+      }
       hasOutputFormat = true;
       return false;
     } else if (packetType == AVC_PACKET_TYPE_AVC_NALU && hasOutputFormat) {
@@ -141,5 +138,37 @@ import androidx.media3.extractor.TrackOutput;
     } else {
       return false;
     }
+  }
+
+  private void outputAvc(ParsableByteArray videoSequence) throws ParserException {
+    AvcConfig avcConfig = AvcConfig.parse(videoSequence);
+    nalUnitLengthFieldLength = avcConfig.nalUnitLengthFieldLength;
+    Format format =
+        new Format.Builder()
+            .setContainerMimeType(MimeTypes.VIDEO_FLV)
+            .setSampleMimeType(MimeTypes.VIDEO_H264)
+            .setCodecs(avcConfig.codecs)
+            .setWidth(avcConfig.width)
+            .setHeight(avcConfig.height)
+            .setPixelWidthHeightRatio(avcConfig.pixelWidthHeightRatio)
+            .setInitializationData(avcConfig.initializationData)
+            .build();
+    output.format(format);
+  }
+
+  private void outputHevc(ParsableByteArray videoSequence) throws ParserException {
+    HevcConfig hevcConfig = HevcConfig.parse(videoSequence);
+    nalUnitLengthFieldLength = hevcConfig.nalUnitLengthFieldLength;
+    Format format =
+        new Format.Builder()
+            .setContainerMimeType(MimeTypes.VIDEO_FLV)
+            .setSampleMimeType(MimeTypes.VIDEO_H265)
+            .setCodecs(hevcConfig.codecs)
+            .setWidth(hevcConfig.width)
+            .setHeight(hevcConfig.height)
+            .setPixelWidthHeightRatio(hevcConfig.pixelWidthHeightRatio)
+            .setInitializationData(hevcConfig.initializationData)
+            .build();
+    output.format(format);
   }
 }
