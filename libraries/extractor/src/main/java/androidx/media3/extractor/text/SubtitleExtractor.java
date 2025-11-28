@@ -34,17 +34,20 @@ import androidx.media3.extractor.ExtractorOutput;
 import androidx.media3.extractor.IndexSeekMap;
 import androidx.media3.extractor.PositionHolder;
 import androidx.media3.extractor.TrackOutput;
+import com.google.common.base.Charsets;
 import com.google.common.primitives.Ints;
 import java.io.IOException;
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
+import org.mozilla.universalchardet.UniversalDetector;
 
 /** Generic extractor for extracting subtitles from various subtitle formats. */
 @UnstableApi
@@ -91,6 +94,7 @@ public class SubtitleExtractor implements Extractor {
   @Nullable private final Format format;
   private final List<Sample> samples;
   private final ParsableByteArray scratchSampleArray;
+  private final UniversalDetector detector;
 
   private byte[] subtitleData;
   private @MonotonicNonNull TrackOutput trackOutput;
@@ -115,6 +119,7 @@ public class SubtitleExtractor implements Extractor {
     scratchSampleArray = new ParsableByteArray();
     // TODO: b/376693592 - Simplify this by taking the post-transformation Format as a parameter
     //  instead.
+    detector = new UniversalDetector(null);
     this.format =
         format != null
             ? format
@@ -171,6 +176,7 @@ public class SubtitleExtractor implements Extractor {
     if (state == STATE_EXTRACTING) {
       boolean inputFinished = readFromInput(input);
       if (inputFinished) {
+        convertToUtf8();
         parseAndWriteToOutput();
         state = STATE_FINISHED;
       }
@@ -296,6 +302,22 @@ public class SubtitleExtractor implements Extractor {
         /* size= */ size,
         /* offset= */ 0,
         /* cryptoData= */ null);
+  }
+
+  private void convertToUtf8() {
+    if (subtitleData.length != bytesRead) {
+      return;
+    }
+    detector.reset();
+    detector.handleData(subtitleData, 0, bytesRead);
+    detector.dataEnd();
+    if (detector.getDetectedCharset() == null) {
+      return;
+    }
+    if (!detector.getDetectedCharset().startsWith("UTF")) {
+      subtitleData = new String(subtitleData, Charset.forName(detector.getDetectedCharset())).getBytes(Charsets.UTF_8);
+    }
+    bytesRead = subtitleData.length;
   }
 
   private static class Sample implements Comparable<Sample> {
