@@ -203,11 +203,11 @@ public final class FlvExtractor implements Extractor {
     int flags = headerBuffer.readUnsignedByte();
     boolean hasAudio = (flags & 0x04) != 0;
     boolean hasVideo = (flags & 0x01) != 0;
-    if (hasAudio && audioReader == null) {
+    if (audioReader == null) {
       audioReader =
           new AudioTagPayloadReader(extractorOutput.track(TAG_TYPE_AUDIO, C.TRACK_TYPE_AUDIO));
     }
-    if (hasVideo && videoReader == null) {
+    if (videoReader == null) {
       videoReader =
           new VideoTagPayloadReader(extractorOutput.track(TAG_TYPE_VIDEO, C.TRACK_TYPE_VIDEO));
     }
