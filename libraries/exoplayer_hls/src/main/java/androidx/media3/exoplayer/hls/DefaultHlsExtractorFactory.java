@@ -299,10 +299,10 @@ public final class DefaultHlsExtractorFactory implements HlsExtractorFactory {
       // exist. If we know from the codec attribute that they don't exist, then we can
       // explicitly ignore them even if they're declared.
       if (!MimeTypes.containsCodecsCorrespondingToMimeType(codecs, MimeTypes.AUDIO_AAC)) {
-        payloadReaderFactoryFlags |= DefaultTsPayloadReaderFactory.FLAG_IGNORE_AAC_STREAM;
+        // payloadReaderFactoryFlags |= DefaultTsPayloadReaderFactory.FLAG_IGNORE_AAC_STREAM;
       }
       if (!MimeTypes.containsCodecsCorrespondingToMimeType(codecs, MimeTypes.VIDEO_H264)) {
-        payloadReaderFactoryFlags |= DefaultTsPayloadReaderFactory.FLAG_IGNORE_H264_STREAM;
+        // payloadReaderFactoryFlags |= DefaultTsPayloadReaderFactory.FLAG_IGNORE_H264_STREAM;
       }
     }
     @TsExtractor.Flags int extractorFlags = 0;
