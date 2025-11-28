@@ -36,6 +36,7 @@ android {
 
 dependencies {
     implementation 'androidx.annotation:annotation:' + androidxAnnotationVersion
+    implementation 'com.googlecode.juniversalchardet:juniversalchardet:1.0.3'
     api project(modulePrefix + 'lib-common')
     api project(modulePrefix + 'lib-container')
     // TODO(b/203752187): Remove this dependency.
