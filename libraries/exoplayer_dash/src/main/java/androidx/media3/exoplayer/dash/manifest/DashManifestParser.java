@@ -610,6 +610,9 @@ public class DashManifestParser extends DefaultHandler
         case "urn:mpeg:dash:mp4protection:2011":
           schemeType = xpp.getAttributeValue(null, "value");
           String defaultKid = XmlPullParserUtil.getAttributeValueIgnorePrefix(xpp, "default_KID");
+          if (TextUtils.isEmpty(defaultKid) || defaultKid.length() < 36) {
+            defaultKid = UUID.randomUUID().toString();
+          }
           if (!TextUtils.isEmpty(defaultKid)
               && !"00000000-0000-0000-0000-000000000000".equals(defaultKid)) {
             String[] defaultKidStrings = defaultKid.split("\\s+");
@@ -1991,7 +1994,7 @@ public class DashManifestParser extends DefaultHandler
 
   protected static long parseLong(XmlPullParser xpp, String name, long defaultValue) {
     String value = xpp.getAttributeValue(null, name);
-    return value == null ? defaultValue : Long.parseLong(value);
+    return value == null ? defaultValue : Long.parseLong(value.replaceAll("[^0-9]", ""));
   }
 
   protected static float parseFloat(XmlPullParser xpp, String name, float defaultValue) {
