@@ -1301,7 +1301,7 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
         return;
       }
       try {
-        initCodec(codecInfo, crypto);
+        initCodec(codecInfo, crypto, availableCodecInfos.peekFirst());
       } catch (Exception e) {
         Log.w(TAG, "Failed to initialize decoder: " + codecInfo, e);
         // This codec failed to initialize, so fall back to the next codec in the list (if any). We
@@ -1366,6 +1366,35 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
       bypassBatchBuffer.setMaxSampleCount(BatchBuffer.DEFAULT_MAX_SAMPLE_COUNT);
     }
     bypassEnabled = true;
+  }
+
+  private void initCodec(MediaCodecInfo codecInfo, @Nullable MediaCrypto crypto, MediaCodecInfo preferredCodecInfo) throws Exception {
+    try {
+      initCodec(codecInfo, crypto);
+    } catch (Exception e) {
+      if (codecInfo == preferredCodecInfo) {
+        // If creating the preferred decoder failed then sleep briefly before retrying.
+        // Workaround for [internal b/191966399].
+        // See also https://github.com/google/ExoPlayer/issues/8696.
+        Log.w(TAG, "Preferred decoder instantiation failed. Sleeping for 50ms then retrying.");
+        int currentDelayMs = 50;
+        Exception lastException = null;
+        for (int retry = 0; retry < 3; retry++) {
+          try {
+            Thread.sleep(/* millis= */ currentDelayMs);
+            initCodec(codecInfo, crypto);
+            return;
+          } catch (Exception e2) {
+            currentDelayMs += 50;
+            Log.w(TAG, "initCodec retry failed. Sleeping for " + currentDelayMs + " ms then retrying.");
+            lastException = e2;
+          }
+        }
+        throw lastException;
+      } else {
+        throw e;
+      }
+    }
   }
 
   private void initCodec(MediaCodecInfo codecInfo, @Nullable MediaCrypto crypto) throws Exception {
