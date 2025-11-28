@@ -161,7 +161,7 @@ public final class HevcConfig {
             NalUnitUtil.H265Sei3dRefDisplayInfoData seiData =
                 NalUnitUtil.parseH265Sei3dRefDisplayInfo(
                     buffer, bufferPosition, bufferPosition + nalUnitLength);
-            if (seiData != null && currentVpsData != null) {
+            if (seiData != null && currentVpsData != null && !currentVpsData.layerInfos.isEmpty()) {
               stereoMode =
                   (seiData.leftViewId == currentVpsData.layerInfos.get(0).viewId)
                       ? C.STEREO_MODE_INTERLEAVED_LEFT_PRIMARY
