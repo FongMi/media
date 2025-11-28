@@ -1200,16 +1200,13 @@ import org.checkerframework.checker.nullness.qual.RequiresNonNull;
   private TrackOutput getMappedTrackOutput(int id, int type) {
     checkArgument(MAPPABLE_TYPES.contains(type));
     int sampleQueueIndex = sampleQueueIndicesByType.get(type, C.INDEX_UNSET);
-    if (sampleQueueIndex == C.INDEX_UNSET) {
+    if (sampleQueueIndex == C.INDEX_UNSET || sampleQueueTrackIds[sampleQueueIndex] != id) {
       return null;
     }
-
     if (sampleQueueMappingDoneByType.add(type)) {
       sampleQueueTrackIds[sampleQueueIndex] = id;
     }
-    return sampleQueueTrackIds[sampleQueueIndex] == id
-        ? sampleQueues[sampleQueueIndex]
-        : createDiscardingTrackOutput(id, type);
+    return sampleQueues[sampleQueueIndex];
   }
 
   private SampleQueue createSampleQueue(int id, int type) {
