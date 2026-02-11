@@ -88,6 +88,8 @@ public final class MediaItem {
     // are removed.
     private LiveConfiguration.Builder liveConfiguration;
     private RequestMetadata requestMetadata;
+    private int decode;
+    private boolean adblock;
 
     /** Creates a builder. */
     @SuppressWarnings("deprecation") // Temporarily uses DrmConfiguration.Builder() constructor.
@@ -110,6 +112,8 @@ public final class MediaItem {
       mediaMetadata = mediaItem.mediaMetadata;
       liveConfiguration = mediaItem.liveConfiguration.buildUpon();
       requestMetadata = mediaItem.requestMetadata;
+      decode = mediaItem.decode;
+      adblock = mediaItem.adblock;
       @Nullable LocalConfiguration localConfiguration = mediaItem.localConfiguration;
       if (localConfiguration != null) {
         customCacheKey = localConfiguration.customCacheKey;
@@ -590,6 +594,18 @@ public final class MediaItem {
       return this;
     }
 
+    @CanIgnoreReturnValue
+    public Builder setDecode(int decode) {
+      this.decode = decode;
+      return this;
+    }
+
+    @CanIgnoreReturnValue
+    public Builder setAdblock(boolean adblock) {
+      this.adblock = adblock;
+      return this;
+    }
+
     /** Sets the media metadata. */
     @CanIgnoreReturnValue
     public Builder setMediaMetadata(MediaMetadata mediaMetadata) {
@@ -630,7 +646,9 @@ public final class MediaItem {
           localConfiguration,
           liveConfiguration.build(),
           mediaMetadata != null ? mediaMetadata : MediaMetadata.EMPTY,
-          requestMetadata);
+          requestMetadata,
+          decode,
+          adblock);
     }
   }
 
@@ -2333,6 +2351,8 @@ public final class MediaItem {
 
   /** The media {@link RequestMetadata}. */
   public final RequestMetadata requestMetadata;
+  public final int decode;
+  public final boolean adblock;
 
   // Using ClippingProperties until they're deleted.
   @SuppressWarnings("deprecation")
@@ -2342,7 +2362,9 @@ public final class MediaItem {
       @Nullable LocalConfiguration localConfiguration,
       LiveConfiguration liveConfiguration,
       MediaMetadata mediaMetadata,
-      RequestMetadata requestMetadata) {
+      RequestMetadata requestMetadata,
+      int decode,
+      boolean adblock) {
     this.mediaId = mediaId;
     this.localConfiguration = localConfiguration;
     this.playbackProperties = localConfiguration;
@@ -2351,6 +2373,8 @@ public final class MediaItem {
     this.clippingConfiguration = clippingConfiguration;
     this.clippingProperties = clippingConfiguration;
     this.requestMetadata = requestMetadata;
+    this.decode = decode;
+    this.adblock = adblock;
   }
 
   /** Returns a {@link Builder} initialized with the values of this instance. */
@@ -2394,6 +2418,8 @@ public final class MediaItem {
   private static final String FIELD_CLIPPING_PROPERTIES = Util.intToStringMaxRadix(3);
   private static final String FIELD_REQUEST_METADATA = Util.intToStringMaxRadix(4);
   private static final String FIELD_LOCAL_CONFIGURATION = Util.intToStringMaxRadix(5);
+  private static final String FIELD_DECODE = Util.intToStringMaxRadix(6);
+  private static final String FIELD_ADBLOCK = Util.intToStringMaxRadix(7);
 
   @UnstableApi
   private Bundle toBundle(boolean includeLocalConfiguration) {
@@ -2416,6 +2442,8 @@ public final class MediaItem {
     if (includeLocalConfiguration && localConfiguration != null) {
       bundle.putBundle(FIELD_LOCAL_CONFIGURATION, localConfiguration.toBundle());
     }
+    bundle.putInt(FIELD_DECODE, decode);
+    bundle.putBoolean(FIELD_ADBLOCK, adblock);
     return bundle;
   }
 
@@ -2483,12 +2511,18 @@ public final class MediaItem {
     } else {
       localConfiguration = LocalConfiguration.fromBundle(localConfigurationBundle);
     }
+
+    int decode = bundle.getInt(FIELD_DECODE, 1);
+    boolean adblock = bundle.getBoolean(FIELD_ADBLOCK, false);
+
     return new MediaItem(
         mediaId,
         clippingConfiguration,
         localConfiguration,
         liveConfiguration,
         mediaMetadata,
-        requestMetadata);
+        requestMetadata,
+        decode,
+        adblock);
   }
 }

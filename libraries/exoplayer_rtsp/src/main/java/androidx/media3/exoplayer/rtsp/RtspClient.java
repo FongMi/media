@@ -38,6 +38,7 @@ import static java.lang.annotation.ElementType.TYPE_USE;
 
 import android.net.Uri;
 import android.os.Handler;
+import android.os.Looper;
 import android.util.SparseArray;
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
@@ -64,6 +65,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.net.Socket;
+import java.net.URI;
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.List;
@@ -315,9 +317,10 @@ import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 
   /** Returns a {@link Socket} that is connected to the {@code uri}. */
   private Socket getSocket(Uri uri) throws IOException {
-    checkArgument(uri.getHost() != null);
-    int rtspPort = uri.getPort() > 0 ? uri.getPort() : DEFAULT_RTSP_PORT;
-    return socketFactory.createSocket(checkNotNull(uri.getHost()), rtspPort);
+    URI uri2 = URI.create(uri.toString());
+    checkArgument(uri2.getHost() != null);
+    int rtspPort = uri2.getPort() > 0 ? uri2.getPort() : DEFAULT_RTSP_PORT;
+    return socketFactory.createSocket(checkNotNull(uri2.getHost()), rtspPort);
   }
 
   private void dispatchRtspError(Throwable error) {

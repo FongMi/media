@@ -55,7 +55,12 @@ public final class HttpUtil {
    */
   @Nullable
   public static String buildRangeRequestHeader(long position, long length) {
-    if (position == 0 && length == C.LENGTH_UNSET) {
+    return buildRangeRequestHeader(position, length, false);
+  }
+
+  @Nullable
+  public static String buildRangeRequestHeader(long position, long length, boolean force) {
+    if (position == 0 && length == C.LENGTH_UNSET && !force) {
       return null;
     }
     StringBuilder rangeValue = new StringBuilder();

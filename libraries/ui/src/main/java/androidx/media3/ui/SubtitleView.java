@@ -72,7 +72,8 @@ public final class SubtitleView extends FrameLayout {
         CaptionStyleCompat style,
         float defaultTextSize,
         @Cue.TextSizeType int defaultTextSizeType,
-        float bottomPaddingFraction);
+        float bottomPaddingFraction,
+        float bottomPosition);
   }
 
   /**
@@ -122,6 +123,7 @@ public final class SubtitleView extends FrameLayout {
   private @Cue.TextSizeType int defaultTextSizeType;
   private float defaultTextSize;
   private float bottomPaddingFraction;
+  private float bottomPosition;
   private boolean applyEmbeddedStyles;
   private boolean applyEmbeddedFontSizes;
 
@@ -142,6 +144,7 @@ public final class SubtitleView extends FrameLayout {
     bottomPaddingFraction = DEFAULT_BOTTOM_PADDING_FRACTION;
     applyEmbeddedStyles = true;
     applyEmbeddedFontSizes = true;
+    bottomPosition = 0;
 
     CanvasSubtitleOutput canvasSubtitleOutput = new CanvasSubtitleOutput(context);
     output = canvasSubtitleOutput;
@@ -317,6 +320,11 @@ public final class SubtitleView extends FrameLayout {
     updateOutput();
   }
 
+  public void setBottomPosition(float bottomPosition) {
+    this.bottomPosition = bottomPosition;
+    updateOutput();
+  }
+
   private float getUserCaptionFontScale() {
     if (isInEditMode()) {
       return 1f;
@@ -347,7 +355,8 @@ public final class SubtitleView extends FrameLayout {
         style,
         defaultTextSize,
         defaultTextSizeType,
-        bottomPaddingFraction);
+        bottomPaddingFraction,
+        bottomPosition);
   }
 
   /**
@@ -381,5 +390,33 @@ public final class SubtitleView extends FrameLayout {
       SubtitleViewUtils.removeEmbeddedFontSizes(strippedCue);
     }
     return strippedCue.build();
+  }
+
+  public float getTextSize() {
+    return defaultTextSize;
+  }
+
+  public void addTextSize(float value) {
+    defaultTextSize += value;
+    updateOutput();
+  }
+
+  public void subTextSize(float value) {
+    defaultTextSize -= value;
+    updateOutput();
+  }
+
+  public float getPosition() {
+    return bottomPosition;
+  }
+
+  public void addPosition(float value) {
+    bottomPosition += value;
+    updateOutput();
+  }
+
+  public void subPosition(float value) {
+    bottomPosition -= value;
+    updateOutput();
   }
 }

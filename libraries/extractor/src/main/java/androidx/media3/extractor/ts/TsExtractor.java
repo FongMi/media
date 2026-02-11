@@ -142,6 +142,8 @@ public final class TsExtractor implements Extractor {
   public static final int TS_STREAM_TYPE_DVBSUBS = 0x59;
   public static final int TS_STREAM_TYPE_DTS_HD = 0x88; // As per ATSC Code Point Registry
   public static final int TS_STREAM_TYPE_DTS_UHD = 0x8B;
+  public static final int TS_STREAM_TYPE_AV3A = 0xD5;
+  public static final int TS_STREAM_TYPE_PGS = 0x90;
 
   // Stream types that aren't defined by the MPEG-2 TS specification.
   public static final int TS_STREAM_TYPE_DC2_H262 = 0x80;
@@ -349,10 +351,26 @@ public final class TsExtractor implements Extractor {
     resetPayloadReaders();
   }
 
+  private void skip(ExtractorInput input) throws IOException {
+    int maxLength = TS_PACKET_SIZE * 5;
+    byte[] buffer = tsPacketBuffer.getData();
+    final int length = Math.min(buffer.length, maxLength + TS_PACKET_SIZE);
+    input.peekFully(buffer, 0, length);
+    for (int i = 0; i < length - TS_PACKET_SIZE; i++) {
+      if (buffer[i] == TS_SYNC_BYTE && buffer[i + TS_PACKET_SIZE] == TS_SYNC_BYTE) {
+        if (i > 0) {
+          input.skipFully(i);
+        }
+        return;
+      }
+    }
+  }
+
   // Extractor implementation.
 
   @Override
   public boolean sniff(ExtractorInput input) throws IOException {
+    skip(input);
     byte[] buffer = tsPacketBuffer.getData();
     input.peekFully(buffer, 0, TS_PACKET_SIZE * SNIFF_TS_PACKET_COUNT);
     for (int startPosCandidate = 0; startPosCandidate < TS_PACKET_SIZE; startPosCandidate++) {
@@ -583,7 +601,7 @@ public final class TsExtractor implements Extractor {
    * <p>This may be a position beyond the buffer limit if the packet has not been read fully into
    * the buffer, or if no packet could be found within the buffer.
    */
-  private int findEndOfFirstTsPacketInBuffer() throws ParserException {
+  private int findEndOfFirstTsPacketInBuffer() {
     int searchStart = tsPacketBuffer.getPosition();
     int limit = tsPacketBuffer.limit();
     int syncBytePosition =
@@ -594,10 +612,6 @@ public final class TsExtractor implements Extractor {
     int endOfPacket = syncBytePosition + TS_PACKET_SIZE;
     if (endOfPacket > limit) {
       bytesSinceLastSync += syncBytePosition - searchStart;
-      if (mode == MODE_HLS && bytesSinceLastSync > TS_PACKET_SIZE * 2) {
-        throw ParserException.createForMalformedContainer(
-            "Cannot find sync byte. Most likely not a Transport Stream.", /* cause= */ null);
-      }
     } else {
       // We have found a packet within the buffer.
       bytesSinceLastSync = 0;
@@ -790,7 +804,7 @@ public final class TsExtractor implements Extractor {
         }
         remainingEntriesLength -= esInfoLength + 5;
 
-        int trackId = mode == MODE_HLS ? streamType : elementaryPid;
+        int trackId = elementaryPid;
         if (trackIds.get(trackId)) {
           continue;
         }

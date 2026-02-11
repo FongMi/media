@@ -23,6 +23,8 @@ import androidx.media3.exoplayer.upstream.ParsingLoadable;
 @UnstableApi
 public interface HlsPlaylistParserFactory {
 
+  void setAdblock(boolean adblock);
+
   /**
    * Returns a stand-alone playlist parser. Playlists parsed by the returned parser do not inherit
    * any attributes from other playlists.

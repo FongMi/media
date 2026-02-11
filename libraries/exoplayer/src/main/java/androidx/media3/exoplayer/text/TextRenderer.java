@@ -161,7 +161,7 @@ public final class TextRenderer extends BaseRenderer implements Callback {
     formatHolder = new FormatHolder();
     finalStreamEndPositionUs = C.TIME_UNSET;
     lastRendererPositionUs = C.TIME_UNSET;
-    legacyDecodingEnabled = false;
+    legacyDecodingEnabled = true;
   }
 
   @Override

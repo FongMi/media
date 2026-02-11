@@ -104,6 +104,7 @@ public final class MimeTypes {
   public static final String AUDIO_WAV = BASE_TYPE_AUDIO + "/wav";
   public static final String AUDIO_MIDI = BASE_TYPE_AUDIO + "/midi";
   @UnstableApi public static final String AUDIO_IAMF = BASE_TYPE_AUDIO + "/iamf";
+  @UnstableApi public static final String AUDIO_AV3A = BASE_TYPE_AUDIO + "/av3a";
 
   @UnstableApi
   public static final String AUDIO_EXOPLAYER_MIDI = BASE_TYPE_AUDIO + "/x-exoplayer-midi";
@@ -161,6 +162,7 @@ public final class MimeTypes {
   @UnstableApi public static final String APPLICATION_ICY = BASE_TYPE_APPLICATION + "/x-icy";
   public static final String APPLICATION_AIT = BASE_TYPE_APPLICATION + "/vnd.dvb.ait";
   public static final String APPLICATION_RTSP = BASE_TYPE_APPLICATION + "/x-rtsp";
+  public static final String APPLICATION_OCTET = BASE_TYPE_APPLICATION + "/octet-stream";
 
   @UnstableApi
   public static final String APPLICATION_MEDIA3_CUES = BASE_TYPE_APPLICATION + "/x-media3-cues";

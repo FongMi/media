@@ -60,8 +60,8 @@ public final class AspectRatioFrameLayout extends FrameLayout {
   @Target(TYPE_USE)
   @IntDef({
     RESIZE_MODE_FIT,
-    RESIZE_MODE_FIXED_WIDTH,
-    RESIZE_MODE_FIXED_HEIGHT,
+    RESIZE_MODE_16_9,
+    RESIZE_MODE_4_3,
     RESIZE_MODE_FILL,
     RESIZE_MODE_ZOOM
   })
@@ -73,12 +73,12 @@ public final class AspectRatioFrameLayout extends FrameLayout {
   /**
    * The width is fixed and the height is increased or decreased to obtain the desired aspect ratio.
    */
-  public static final int RESIZE_MODE_FIXED_WIDTH = 1;
+  public static final int RESIZE_MODE_16_9 = 1;
 
   /**
    * The height is fixed and the width is increased or decreased to obtain the desired aspect ratio.
    */
-  public static final int RESIZE_MODE_FIXED_HEIGHT = 2;
+  public static final int RESIZE_MODE_4_3 = 2;
 
   /** The specified aspect ratio is ignored. */
   public static final int RESIZE_MODE_FILL = 3;
@@ -104,6 +104,7 @@ public final class AspectRatioFrameLayout extends FrameLayout {
   @Nullable private AspectRatioListener aspectRatioListener;
 
   private float videoAspectRatio;
+  private float oriAspectRatio;
   private @ResizeMode int resizeMode;
 
   public AspectRatioFrameLayout(Context context) {
@@ -133,8 +134,9 @@ public final class AspectRatioFrameLayout extends FrameLayout {
    * @param widthHeightRatio The width to height ratio.
    */
   public void setAspectRatio(float widthHeightRatio) {
-    if (this.videoAspectRatio != widthHeightRatio) {
+    if (this.videoAspectRatio != widthHeightRatio && widthHeightRatio > 0) {
       this.videoAspectRatio = widthHeightRatio;
+      this.oriAspectRatio = widthHeightRatio;
       requestLayout();
     }
   }
@@ -174,6 +176,14 @@ public final class AspectRatioFrameLayout extends FrameLayout {
       return;
     }
 
+    if (resizeMode == RESIZE_MODE_16_9) {
+      videoAspectRatio = 16 / 9f;
+    } else if (resizeMode == RESIZE_MODE_4_3) {
+      videoAspectRatio = 4f / 3f;
+    } else {
+      videoAspectRatio = oriAspectRatio;
+    }
+
     int width = getMeasuredWidth();
     int height = getMeasuredHeight();
     float viewAspectRatio = (float) width / height;
@@ -185,12 +195,6 @@ public final class AspectRatioFrameLayout extends FrameLayout {
     }
 
     switch (resizeMode) {
-      case RESIZE_MODE_FIXED_WIDTH:
-        height = (int) (width / videoAspectRatio);
-        break;
-      case RESIZE_MODE_FIXED_HEIGHT:
-        width = (int) (height * videoAspectRatio);
-        break;
       case RESIZE_MODE_ZOOM:
         if (aspectDeformation > 0) {
           width = (int) (height * videoAspectRatio);
@@ -198,6 +202,8 @@ public final class AspectRatioFrameLayout extends FrameLayout {
           height = (int) (width / videoAspectRatio);
         }
         break;
+      case RESIZE_MODE_16_9:
+      case RESIZE_MODE_4_3:
       case RESIZE_MODE_FIT:
         if (aspectDeformation > 0) {
           height = (int) (width / videoAspectRatio);

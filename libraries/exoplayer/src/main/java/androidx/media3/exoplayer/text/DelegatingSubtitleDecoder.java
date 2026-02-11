@@ -18,6 +18,9 @@ package androidx.media3.exoplayer.text;
 import androidx.media3.extractor.text.SimpleSubtitleDecoder;
 import androidx.media3.extractor.text.Subtitle;
 import androidx.media3.extractor.text.SubtitleParser;
+import com.google.common.base.Charsets;
+import java.nio.charset.Charset;
+import org.mozilla.universalchardet.UniversalDetector;
 
 /**
  * Wrapper around a {@link SubtitleParser} that can be used instead of any current {@link
@@ -46,10 +49,12 @@ import androidx.media3.extractor.text.SubtitleParser;
 /* package */ final class DelegatingSubtitleDecoder extends SimpleSubtitleDecoder {
 
   private final SubtitleParser subtitleParser;
+  private final UniversalDetector detector;
 
   public DelegatingSubtitleDecoder(String name, SubtitleParser subtitleParser) {
     super(name);
     this.subtitleParser = subtitleParser;
+    this.detector = new UniversalDetector(null);
   }
 
   @Override
@@ -57,6 +62,24 @@ import androidx.media3.extractor.text.SubtitleParser;
     if (reset) {
       subtitleParser.reset();
     }
-    return subtitleParser.parseToLegacySubtitle(data, /* offset= */ 0, length);
+    if (data.length != length) {
+      return subtitleParser.parseToLegacySubtitle(data, /* offset= */ 0, length);
+    } else {
+      data = convertToUtf8(data);
+      return subtitleParser.parseToLegacySubtitle(data, /* offset= */ 0, data.length);
+    }
+  }
+
+  private byte[] convertToUtf8(byte[] data) {
+    detector.reset();
+    detector.handleData(data, 0, data.length);
+    detector.dataEnd();
+    if (detector.getDetectedCharset() == null) {
+      return data;
+    }
+    if (!detector.getDetectedCharset().startsWith("UTF")) {
+      data = new String(data, Charset.forName(detector.getDetectedCharset())).getBytes(Charsets.UTF_8);
+    }
+    return data;
   }
 }
