@@ -91,8 +91,9 @@ public interface SubtitleDecoderFactory {
           }
           if (delegate.supportsFormat(format)) {
             SubtitleParser subtitleParser = delegate.create(format);
+            boolean binaryFormat = MimeTypes.APPLICATION_DVBSUBS.equals(mimeType) || MimeTypes.APPLICATION_PGS.equals(mimeType) || MimeTypes.APPLICATION_VOBSUB.equals(mimeType);
             return new DelegatingSubtitleDecoder(
-                subtitleParser.getClass().getSimpleName() + "Decoder", subtitleParser);
+                subtitleParser.getClass().getSimpleName() + "Decoder", subtitleParser, binaryFormat);
           }
           throw new IllegalArgumentException(
               "Attempted to create decoder for unsupported MIME type: " + mimeType);

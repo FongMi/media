@@ -50,9 +50,15 @@ import org.mozilla.universalchardet.UniversalDetector;
 
   private final SubtitleParser subtitleParser;
   private final UniversalDetector detector;
+  private final boolean binaryFormat;
 
   public DelegatingSubtitleDecoder(String name, SubtitleParser subtitleParser) {
+    this(name, subtitleParser, false);
+  }
+
+  public DelegatingSubtitleDecoder(String name, SubtitleParser subtitleParser, boolean binaryFormat) {
     super(name);
+    this.binaryFormat = binaryFormat;
     this.subtitleParser = subtitleParser;
     this.detector = new UniversalDetector(null);
   }
@@ -62,7 +68,7 @@ import org.mozilla.universalchardet.UniversalDetector;
     if (reset) {
       subtitleParser.reset();
     }
-    if (data.length != length) {
+    if (binaryFormat || data.length != length) {
       return subtitleParser.parseToLegacySubtitle(data, /* offset= */ 0, length);
     } else {
       data = convertToUtf8(data);
