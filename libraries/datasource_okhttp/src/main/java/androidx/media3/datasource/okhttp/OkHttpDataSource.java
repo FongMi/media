@@ -397,15 +397,16 @@ public class OkHttpDataSource extends BaseDataSource implements HttpDataSource {
       builder.header(header.getKey(), header.getValue());
     }
 
-    @Nullable String rangeHeader = buildRangeRequestHeader(position, length);
+    boolean force = Util.inferContentType(dataSpec.uri) == C.CONTENT_TYPE_OTHER;
+    @Nullable String rangeHeader = buildRangeRequestHeader(position, length, force);
     if (rangeHeader != null) {
-      builder.addHeader(HttpHeaders.RANGE, rangeHeader);
+      builder.header(HttpHeaders.RANGE, rangeHeader);
     }
     if (userAgent != null) {
-      builder.addHeader(HttpHeaders.USER_AGENT, userAgent);
+      builder.header(HttpHeaders.USER_AGENT, userAgent);
     }
     if (!dataSpec.isFlagSet(DataSpec.FLAG_ALLOW_GZIP)) {
-      builder.addHeader(HttpHeaders.ACCEPT_ENCODING, "identity");
+      builder.header(HttpHeaders.ACCEPT_ENCODING, "identity");
     }
 
     @Nullable RequestBody requestBody = null;
@@ -478,7 +479,6 @@ public class OkHttpDataSource extends BaseDataSource implements HttpDataSource {
         bytesToSkip -= read;
         bytesTransferred(read);
       }
-      return;
     } catch (IOException e) {
       if (e instanceof HttpDataSourceException) {
         throw (HttpDataSourceException) e;
