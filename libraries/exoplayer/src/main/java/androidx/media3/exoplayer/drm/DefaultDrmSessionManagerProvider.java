@@ -102,18 +102,6 @@ public final class DefaultDrmSessionManagerProvider implements DrmSessionManager
   }
 
   private DrmSessionManager createManager(MediaItem.DrmConfiguration drmConfiguration) {
-    DataSource.Factory dataSourceFactory =
-        drmHttpDataSourceFactory != null
-            ? drmHttpDataSourceFactory
-            : new DefaultHttpDataSource.Factory().setUserAgent(userAgent);
-    HttpMediaDrmCallback httpDrmCallback =
-        new HttpMediaDrmCallback(
-            drmConfiguration.licenseUri == null ? null : drmConfiguration.licenseUri.toString(),
-            drmConfiguration.forceDefaultLicenseUri,
-            dataSourceFactory);
-    for (Map.Entry<String, String> entry : drmConfiguration.licenseRequestHeaders.entrySet()) {
-      httpDrmCallback.setKeyRequestProperty(entry.getKey(), entry.getValue());
-    }
     DefaultDrmSessionManager.Builder drmSessionManagerBuilder =
         new DefaultDrmSessionManager.Builder()
             .setUuidAndExoMediaDrmProvider(
@@ -125,8 +113,22 @@ public final class DefaultDrmSessionManagerProvider implements DrmSessionManager
     if (drmLoadErrorHandlingPolicy != null) {
       drmSessionManagerBuilder.setLoadErrorHandlingPolicy(drmLoadErrorHandlingPolicy);
     }
-    DefaultDrmSessionManager drmSessionManager = drmSessionManagerBuilder.build(httpDrmCallback);
+    DefaultDrmSessionManager drmSessionManager = drmSessionManagerBuilder.build(getDrmCallback());
     drmSessionManager.setMode(MODE_PLAYBACK, drmConfiguration.getKeySetId());
     return drmSessionManager;
+  }
+
+  private MediaDrmCallback getDrmCallback() {
+    @Nullable String licenseUrl = drmConfiguration.licenseUri == null ? null : drmConfiguration.licenseUri.toString();
+    if (licenseUrl == null || licenseUrl.startsWith("http")) {
+      DataSource.Factory dataSourceFactory = drmHttpDataSourceFactory != null ? drmHttpDataSourceFactory : new DefaultHttpDataSource.Factory().setUserAgent(userAgent);
+      HttpMediaDrmCallback httpDrmCallback = new HttpMediaDrmCallback(licenseUrl, drmConfiguration.forceDefaultLicenseUri, dataSourceFactory);
+      for (Map.Entry<String, String> entry : drmConfiguration.licenseRequestHeaders.entrySet()) {
+        httpDrmCallback.setKeyRequestProperty(entry.getKey(), entry.getValue());
+      }
+      return httpDrmCallback;
+    } else {
+      return new LocalMediaDrmCallback(licenseUrl.getBytes());
+    }
   }
 }
