@@ -128,6 +128,7 @@ public final class DefaultDataSource implements DataSource {
   private static final String SCHEME_RTMP = "rtmp";
   private static final String SCHEME_UDP = "udp";
   private static final String SCHEME_SMB = "smb";
+  private static final String SCHEME_PROXY = "proxy";
   private static final String SCHEME_DATA = DataSchemeDataSource.SCHEME_DATA;
 
   @SuppressWarnings("deprecation") // Detecting deprecated scheme.
@@ -150,6 +151,8 @@ public final class DefaultDataSource implements DataSource {
   @Nullable private DataSource rawResourceDataSource;
 
   @Nullable private DataSource dataSource;
+
+  private int port;
 
   /**
    * Constructs a new instance, optionally configured to follow cross-protocol redirects.
@@ -254,6 +257,10 @@ public final class DefaultDataSource implements DataSource {
     checkState(dataSource == null);
     // Choose the correct source for the scheme.
     String scheme = dataSpec.uri.getScheme();
+    if (SCHEME_PROXY.equals(scheme)) {
+      if (port == 0) port = getPort();
+      dataSpec = dataSpec.buildUpon().setUri(dataSpec.uri.toString().replace("proxy://", "http://127.0.0.1:" + port + "/proxy?")).build();
+    }
     if (Util.isLocalFileUri(dataSpec.uri)) {
       String uriPath = dataSpec.uri.getPath();
       if (uriPath != null && uriPath.startsWith("/android_asset/")) {
@@ -401,6 +408,14 @@ public final class DefaultDataSource implements DataSource {
       @Nullable DataSource dataSource, TransferListener listener) {
     if (dataSource != null) {
       dataSource.addTransferListener(listener);
+    }
+  }
+
+  private int getPort() {
+    try {
+      return (int) Class.forName("com.github.catvod.Proxy").getMethod("getPort").invoke(null);
+    } catch (Throwable e) {
+      return 9978;
     }
   }
 }
