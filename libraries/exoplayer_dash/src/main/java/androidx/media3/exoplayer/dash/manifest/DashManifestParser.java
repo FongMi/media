@@ -43,6 +43,7 @@ import androidx.media3.exoplayer.dash.manifest.SegmentBase.SegmentList;
 import androidx.media3.exoplayer.dash.manifest.SegmentBase.SegmentTemplate;
 import androidx.media3.exoplayer.dash.manifest.SegmentBase.SegmentTimelineElement;
 import androidx.media3.exoplayer.dash.manifest.SegmentBase.SingleSegmentBase;
+import androidx.media3.exoplayer.drm.ClearKeyUtil;
 import androidx.media3.exoplayer.upstream.ParsingLoadable;
 import androidx.media3.extractor.metadata.emsg.EventMessage;
 import androidx.media3.extractor.mp4.PsshAtomUtil;
@@ -1783,6 +1784,10 @@ public class DashManifestParser extends DefaultHandler
       }
     }
     if (clearKeyLicenseServerUrl == null) {
+      byte[] data = ClearKeyUtil.buildClearKeyPssh(schemeDatas);
+      if (data != null) {
+        schemeDatas.add(new SchemeData(C.CLEARKEY_UUID, null, schemeDatas.get(0).mimeType, data));
+      }
       return;
     }
     // Fill in the ClearKey information into the existing PSSH schema data if applicable.
