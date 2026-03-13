@@ -2684,6 +2684,21 @@ public final class Util {
       return C.CONTENT_TYPE_RTSP;
     }
 
+    if ("data".equals(scheme)) {
+      if (uri.getSchemeSpecificPart().startsWith(MimeTypes.APPLICATION_MPD)) {
+        return C.CONTENT_TYPE_DASH;
+      } else {
+        return C.CONTENT_TYPE_HLS;
+      }
+    }
+
+    String url = uri.toString();
+    if (url.contains("=m3u8")) {
+      return C.CONTENT_TYPE_HLS;
+    } else if (url.contains("=mpd")) {
+      return C.CONTENT_TYPE_DASH;
+    }
+
     @Nullable String lastPathSegment = uri.getLastPathSegment();
     if (lastPathSegment == null) {
       return C.CONTENT_TYPE_OTHER;
@@ -2738,6 +2753,7 @@ public final class Util {
     switch (fileExtension) {
       case "mpd":
         return C.CONTENT_TYPE_DASH;
+      case "php":
       case "m3u8":
         return C.CONTENT_TYPE_HLS;
       case "ism":
