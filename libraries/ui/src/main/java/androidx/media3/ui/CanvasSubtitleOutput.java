@@ -43,6 +43,12 @@ import java.util.List;
   private float bottomPaddingFraction;
   private float bottomPosition;
 
+  private boolean hasVideoBounds;
+  private int videoBoundsLeft;
+  private int videoBoundsTop;
+  private int videoBoundsRight;
+  private int videoBoundsBottom;
+
   public CanvasSubtitleOutput(Context context) {
     this(context, /* attrs= */ null);
   }
@@ -77,6 +83,16 @@ import java.util.List;
       painters.add(new SubtitlePainter(getContext()));
     }
     // Invalidate to trigger drawing.
+    invalidate();
+  }
+
+  @Override
+  public void setVideoBounds(int left, int top, int right, int bottom) {
+    hasVideoBounds = true;
+    videoBoundsLeft = left;
+    videoBoundsTop = top;
+    videoBoundsRight = right;
+    videoBoundsBottom = bottom;
     invalidate();
   }
 
@@ -118,6 +134,11 @@ import java.util.List;
           SubtitleViewUtils.resolveTextSize(
               cue.textSizeType, cue.textSize, rawViewHeight, viewHeightMinusPadding);
       SubtitlePainter painter = painters.get(i);
+      boolean isBitmapCue = cue.bitmap != null;
+      int cueBoxLeft = (isBitmapCue && hasVideoBounds) ? videoBoundsLeft : left;
+      int cueBoxTop = (isBitmapCue && hasVideoBounds) ? videoBoundsTop : top;
+      int cueBoxRight = (isBitmapCue && hasVideoBounds) ? videoBoundsRight : right;
+      int cueBoxBottom = (isBitmapCue && hasVideoBounds) ? videoBoundsBottom : bottom;
       painter.draw(
           cue,
           style,
@@ -126,10 +147,10 @@ import java.util.List;
           bottomPaddingFraction,
           bottomPosition,
           canvas,
-          left,
-          top,
-          right,
-          bottom);
+          cueBoxLeft,
+          cueBoxTop,
+          cueBoxRight,
+          cueBoxBottom);
     }
   }
 

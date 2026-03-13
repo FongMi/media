@@ -736,6 +736,14 @@ public class PlayerView extends FrameLayout implements AdViewProvider {
   }
 
   @Override
+  protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+    super.onLayout(changed, left, top, right, bottom);
+    if (contentFrame != null && subtitleView != null) {
+      subtitleView.setVideoBounds(contentFrame.getLeft(), contentFrame.getTop(), contentFrame.getRight(), contentFrame.getBottom());
+    }
+  }
+
+  @Override
   public void setVisibility(int visibility) {
     super.setVisibility(visibility);
     if (surfaceView instanceof SurfaceView) {

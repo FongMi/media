@@ -145,6 +145,11 @@ import java.util.Map;
   }
 
   @Override
+  public void setVideoBounds(int left, int top, int right, int bottom) {
+    canvasSubtitleOutput.setVideoBounds(left, top, right, bottom);
+  }
+
+  @Override
   protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
     super.onLayout(changed, left, top, right, bottom);
     if (changed && !textCues.isEmpty()) {
