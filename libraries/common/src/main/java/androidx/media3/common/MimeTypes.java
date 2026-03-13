@@ -68,6 +68,10 @@ public final class MimeTypes {
   public static final String VIDEO_MJPEG = BASE_TYPE_VIDEO + "/mjpeg";
   public static final String VIDEO_MP42 = BASE_TYPE_VIDEO + "/mp42";
   public static final String VIDEO_MP43 = BASE_TYPE_VIDEO + "/mp43";
+  public static final String VIDEO_RV10 = BASE_TYPE_VIDEO + "/x-rv10";
+  public static final String VIDEO_RV20 = BASE_TYPE_VIDEO + "/x-rv20";
+  public static final String VIDEO_RV30 = BASE_TYPE_VIDEO + "/x-rv30";
+  public static final String VIDEO_RV40 = BASE_TYPE_VIDEO + "/x-rv40";
   @UnstableApi public static final String VIDEO_MV_HEVC = BASE_TYPE_VIDEO + "/mv-hevc";
   @UnstableApi public static final String VIDEO_RAW = BASE_TYPE_VIDEO + "/raw";
   @UnstableApi public static final String VIDEO_UNKNOWN = BASE_TYPE_VIDEO + "/x-unknown";
@@ -113,6 +117,11 @@ public final class MimeTypes {
   public static final String AUDIO_WMA_LOSSLESS = BASE_TYPE_AUDIO + "/x-ms-wmalossless";
   public static final String AUDIO_MIDI = BASE_TYPE_AUDIO + "/midi";
   public static final String AUDIO_AV3A = BASE_TYPE_AUDIO + "/av3a";
+  public static final String AUDIO_ATRAC3 = BASE_TYPE_AUDIO + "/atrac3";
+  public static final String AUDIO_ATRAC3P = BASE_TYPE_AUDIO + "/atrac3p";
+  public static final String AUDIO_COOK = BASE_TYPE_AUDIO + "/cook";
+  public static final String AUDIO_RALF = BASE_TYPE_AUDIO + "/x-ralf";
+  public static final String AUDIO_SIPR = BASE_TYPE_AUDIO + "/x-sipr";
   @UnstableApi public static final String AUDIO_IAMF = BASE_TYPE_AUDIO + "/iamf";
 
   @UnstableApi
@@ -136,6 +145,7 @@ public final class MimeTypes {
   public static final String APPLICATION_MPD = BASE_TYPE_APPLICATION + "/dash+xml";
   public static final String APPLICATION_M3U8 = BASE_TYPE_APPLICATION + "/x-mpegURL";
   public static final String APPLICATION_SS = BASE_TYPE_APPLICATION + "/vnd.ms-sstr+xml";
+  public static final String APPLICATION_RM = BASE_TYPE_APPLICATION + "/vnd.rn-realmedia";
   public static final String APPLICATION_ID3 = BASE_TYPE_APPLICATION + "/id3";
   public static final String APPLICATION_CEA608 = BASE_TYPE_APPLICATION + "/cea-608";
   public static final String APPLICATION_CEA708 = BASE_TYPE_APPLICATION + "/cea-708";

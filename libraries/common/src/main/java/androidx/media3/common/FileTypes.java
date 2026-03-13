@@ -60,6 +60,7 @@ public final class FileTypes {
    *   <li>{@link #HEIF}
    *   <li>{@link #AVIF}
    *   <li>{@link #ASF}
+   *   <li>{@link #RM}
    * </ul>
    */
   @Documented
@@ -67,7 +68,7 @@ public final class FileTypes {
   @Target(TYPE_USE)
   @IntDef({
     UNKNOWN, AC3, AC4, ADTS, AMR, FLAC, FLV, MATROSKA, MP3, MP4, OGG, PS, TS, WAV, WEBVTT, JPEG,
-    MIDI, AVI, PNG, WEBP, BMP, HEIF, AVIF, ASF
+    MIDI, AVI, PNG, WEBP, BMP, HEIF, AVIF, ASF, RM
   })
   public @interface Type {}
 
@@ -143,6 +144,9 @@ public final class FileTypes {
   /** File type for the ASF format, including WMA and WMV. */
   public static final int ASF = 22;
 
+  /** File type for the RMVB format. */
+  public static final int RM = 23;
+
   @VisibleForTesting /* package */ static final String HEADER_CONTENT_TYPE = "Content-Type";
 
   private static final String EXTENSION_AC3 = ".ac3";
@@ -188,6 +192,8 @@ public final class FileTypes {
   private static final String EXTENSION_HEIC = ".heic";
   private static final String EXTENSION_HEIF = ".heif";
   private static final String EXTENSION_AVIF = ".avif";
+  private static final String EXTENSION_RM = ".rm";
+  private static final String EXTENSION_RMVB = ".rmvb";
 
   private FileTypes() {}
 
@@ -267,6 +273,8 @@ public final class FileTypes {
         return FileTypes.HEIF;
       case MimeTypes.IMAGE_AVIF:
         return FileTypes.AVIF;
+      case MimeTypes.APPLICATION_RM:
+        return FileTypes.RM;
       default:
         return FileTypes.UNKNOWN;
     }
@@ -344,6 +352,8 @@ public final class FileTypes {
       return FileTypes.HEIF;
     } else if (filename.endsWith(EXTENSION_AVIF)) {
       return FileTypes.AVIF;
+    } else if (filename.endsWith(EXTENSION_RM) || filename.endsWith(EXTENSION_RMVB)) {
+      return FileTypes.RM;
     } else if (filename.endsWith(EXTENSION_ASF) || filename.endsWith(EXTENSION_WMA) || filename.endsWith(EXTENSION_WMV)) {
       return FileTypes.ASF;
     } else {
