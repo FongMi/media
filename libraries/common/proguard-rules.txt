@@ -20,3 +20,9 @@
 # Workaround for https://issuetracker.google.com/issues/112297269
 # This is needed for ProGuard but not R8.
 -keepclassmembernames class com.google.common.base.Function { *; }
+
+# SMBJ
+-keep class com.hierynomus.** { *; }
+-keep class net.engio.mbassy.** { *; }
+-dontwarn org.ietf.jgss.**
+-dontwarn javax.**
