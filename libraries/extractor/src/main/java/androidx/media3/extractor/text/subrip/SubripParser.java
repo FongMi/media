@@ -60,7 +60,7 @@ public final class SubripParser implements SubtitleParser {
   private static final String TAG = "SubripParser";
 
   // Some SRT files don't include hours or milliseconds in the timecode, so we use optional groups.
-  private static final String SUBRIP_TIMECODE = "(?:(\\d+):)?(\\d+):(\\d+)(?:,(\\d{3}))?";
+  private static final String SUBRIP_TIMECODE = "(?:(\\d+):)?(\\d+):(\\d+)(?:[,.](\\d+))?";
   private static final Pattern SUBRIP_TIMING_LINE =
       Pattern.compile("\\s*(" + SUBRIP_TIMECODE + ")\\s*-->\\s*(" + SUBRIP_TIMECODE + ")\\s*");
 
@@ -82,6 +82,8 @@ public final class SubripParser implements SubtitleParser {
   private final StringBuilder textBuilder;
   private final ArrayList<String> tags;
   private final ParsableByteArray parsableByteArray;
+  private int lastIndex = 0;
+  private int index = 0;
 
   public SubripParser() {
     textBuilder = new StringBuilder();
@@ -119,14 +121,21 @@ public final class SubripParser implements SubtitleParser {
 
       // Parse and check the index line.
       try {
-        Integer.parseInt(currentLine);
+        if (lastIndex == index) {
+          index = Integer.parseInt(currentLine);
+          lastIndex = index;
+        }
       } catch (NumberFormatException e) {
         Log.w(TAG, "Skipping invalid index: " + currentLine);
         continue;
       }
 
       // Read and parse the timing line.
-      currentLine = parsableByteArray.readLine(charset);
+      if (lastIndex == index) {
+        currentLine = parsableByteArray.readLine(charset);
+      } else {
+        lastIndex = index;
+      }
       if (currentLine == null) {
         Log.w(TAG, "Unexpected end");
         break;
@@ -153,6 +162,11 @@ public final class SubripParser implements SubtitleParser {
         }
         textBuilder.append(processLine(currentLine, tags));
         currentLine = parsableByteArray.readLine(charset);
+        try {
+          lastIndex = Integer.parseInt(currentLine);
+          break;
+        } catch (NumberFormatException e) {
+        }
       }
 
       Spanned text = Html.fromHtml(textBuilder.toString());
