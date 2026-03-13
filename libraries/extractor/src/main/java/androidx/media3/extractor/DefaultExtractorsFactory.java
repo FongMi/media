@@ -30,6 +30,7 @@ import androidx.media3.common.util.TimestampAdjuster;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.extractor.amr.AmrExtractor;
 import androidx.media3.extractor.avi.AviExtractor;
+import androidx.media3.extractor.asf.AsfExtractor;
 import androidx.media3.extractor.avif.AvifExtractor;
 import androidx.media3.extractor.bmp.BmpExtractor;
 import androidx.media3.extractor.flac.FlacExtractor;
@@ -94,6 +95,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *   <li>BMP ({@link BmpExtractor})
  *   <li>HEIF ({@link HeifExtractor})
  *   <li>AVIF ({@link AvifExtractor})
+ *   <li>ASF ({@link AsfExtractor})
  *   <li>MIDI, if available, the MIDI extension's {@code androidx.media3.decoder.midi.MidiExtractor}
  *       is used.
  * </ul>
@@ -123,6 +125,7 @@ public final class DefaultExtractorsFactory implements ExtractorsFactory {
         // The following extractors are not part of the optimized ordering, and were appended
         // without further analysis.
         FileTypes.AVI,
+        FileTypes.ASF,
         FileTypes.MIDI,
         FileTypes.JPEG,
         FileTypes.PNG,
@@ -573,6 +576,9 @@ public final class DefaultExtractorsFactory implements ExtractorsFactory {
             new AviExtractor(
                 (textTrackTranscodingEnabled ? 0 : AviExtractor.FLAG_EMIT_RAW_SUBTITLE_DATA),
                 subtitleParserFactory));
+        break;
+      case FileTypes.ASF:
+        extractors.add(new AsfExtractor());
         break;
       case FileTypes.PNG:
         extractors.add(new PngExtractor());

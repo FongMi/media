@@ -59,6 +59,7 @@ public final class FileTypes {
    *   <li>{@link #BMP}
    *   <li>{@link #HEIF}
    *   <li>{@link #AVIF}
+   *   <li>{@link #ASF}
    * </ul>
    */
   @Documented
@@ -66,7 +67,7 @@ public final class FileTypes {
   @Target(TYPE_USE)
   @IntDef({
     UNKNOWN, AC3, AC4, ADTS, AMR, FLAC, FLV, MATROSKA, MP3, MP4, OGG, PS, TS, WAV, WEBVTT, JPEG,
-    MIDI, AVI, PNG, WEBP, BMP, HEIF, AVIF
+    MIDI, AVI, PNG, WEBP, BMP, HEIF, AVIF, ASF
   })
   public @interface Type {}
 
@@ -139,6 +140,9 @@ public final class FileTypes {
   /** File type for the AVIF format. */
   public static final int AVIF = 21;
 
+  /** File type for the ASF format, including WMA and WMV. */
+  public static final int ASF = 22;
+
   @VisibleForTesting /* package */ static final String HEADER_CONTENT_TYPE = "Content-Type";
 
   private static final String EXTENSION_AC3 = ".ac3";
@@ -169,11 +173,14 @@ public final class FileTypes {
   private static final String EXTENSION_PREFIX_TS = ".ts";
   private static final String EXTENSION_WAV = ".wav";
   private static final String EXTENSION_WAVE = ".wave";
+  private static final String EXTENSION_WMA = ".wma";
+  private static final String EXTENSION_WMV = ".wmv";
   private static final String EXTENSION_VTT = ".vtt";
   private static final String EXTENSION_WEBVTT = ".webvtt";
   private static final String EXTENSION_JPG = ".jpg";
   private static final String EXTENSION_JPEG = ".jpeg";
   private static final String EXTENSION_AVI = ".avi";
+  private static final String EXTENSION_ASF = ".asf";
   private static final String EXTENSION_PNG = ".png";
   private static final String EXTENSION_WEBP = ".webp";
   private static final String EXTENSION_BMP = ".bmp";
@@ -246,6 +253,9 @@ public final class FileTypes {
         return FileTypes.JPEG;
       case MimeTypes.VIDEO_AVI:
         return FileTypes.AVI;
+      case MimeTypes.AUDIO_WMA:
+      case MimeTypes.VIDEO_WMV:
+        return FileTypes.ASF;
       case MimeTypes.IMAGE_PNG:
         return FileTypes.PNG;
       case MimeTypes.IMAGE_WEBP:
@@ -334,6 +344,8 @@ public final class FileTypes {
       return FileTypes.HEIF;
     } else if (filename.endsWith(EXTENSION_AVIF)) {
       return FileTypes.AVIF;
+    } else if (filename.endsWith(EXTENSION_ASF) || filename.endsWith(EXTENSION_WMA) || filename.endsWith(EXTENSION_WMV)) {
+      return FileTypes.ASF;
     } else {
       return FileTypes.UNKNOWN;
     }

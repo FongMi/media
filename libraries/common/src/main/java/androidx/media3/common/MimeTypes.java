@@ -62,6 +62,9 @@ public final class MimeTypes {
   public static final String VIDEO_DOLBY_VISION = BASE_TYPE_VIDEO + "/dolby-vision";
   public static final String VIDEO_OGG = BASE_TYPE_VIDEO + "/ogg";
   public static final String VIDEO_AVI = BASE_TYPE_VIDEO + "/x-msvideo";
+  public static final String VIDEO_WMV = BASE_TYPE_VIDEO + "/x-ms-wmv";
+  public static final String VIDEO_WMV1 = BASE_TYPE_VIDEO + "/x-ms-wmv1";
+  public static final String VIDEO_WMV2 = BASE_TYPE_VIDEO + "/x-ms-wmv2";
   public static final String VIDEO_MJPEG = BASE_TYPE_VIDEO + "/mjpeg";
   public static final String VIDEO_MP42 = BASE_TYPE_VIDEO + "/mp42";
   public static final String VIDEO_MP43 = BASE_TYPE_VIDEO + "/mp43";
@@ -102,6 +105,12 @@ public final class MimeTypes {
   public static final String AUDIO_MSGSM = BASE_TYPE_AUDIO + "/gsm";
   public static final String AUDIO_OGG = BASE_TYPE_AUDIO + "/ogg";
   public static final String AUDIO_WAV = BASE_TYPE_AUDIO + "/wav";
+  public static final String AUDIO_WMA = BASE_TYPE_AUDIO + "/x-ms-wma";
+  public static final String AUDIO_WMA1 = BASE_TYPE_AUDIO + "/x-ms-wmav1";
+  public static final String AUDIO_WMA2 = BASE_TYPE_AUDIO + "/x-ms-wmav2";
+  public static final String AUDIO_WMA_PRO = BASE_TYPE_AUDIO + "/x-ms-wmapro";
+  public static final String AUDIO_WMA_VOICE = BASE_TYPE_AUDIO + "/x-ms-wmavoice";
+  public static final String AUDIO_WMA_LOSSLESS = BASE_TYPE_AUDIO + "/x-ms-wmalossless";
   public static final String AUDIO_MIDI = BASE_TYPE_AUDIO + "/midi";
   public static final String AUDIO_AV3A = BASE_TYPE_AUDIO + "/av3a";
   @UnstableApi public static final String AUDIO_IAMF = BASE_TYPE_AUDIO + "/iamf";
