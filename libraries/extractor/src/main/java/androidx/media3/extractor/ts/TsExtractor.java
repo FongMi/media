@@ -158,7 +158,6 @@ public final class TsExtractor implements Extractor {
   private static final long HEVC_FORMAT_IDENTIFIER = 0x48455643;
 
   private static final int BUFFER_SIZE = TS_PACKET_SIZE * 50;
-  private static final int SNIFF_TS_PACKET_COUNT = 5;
 
   private final @Mode int mode;
   private final @Flags int extractorFlags;
@@ -354,20 +353,12 @@ public final class TsExtractor implements Extractor {
   @Override
   public boolean sniff(ExtractorInput input) throws IOException {
     byte[] buffer = tsPacketBuffer.getData();
-    input.peekFully(buffer, 0, TS_PACKET_SIZE * SNIFF_TS_PACKET_COUNT);
-    for (int startPosCandidate = 0; startPosCandidate < TS_PACKET_SIZE; startPosCandidate++) {
-      // Try to identify at least SNIFF_TS_PACKET_COUNT packets starting with TS_SYNC_BYTE.
-      boolean isSyncBytePatternCorrect = true;
-      for (int i = 0; i < SNIFF_TS_PACKET_COUNT; i++) {
-        if (buffer[startPosCandidate + i * TS_PACKET_SIZE] != TS_SYNC_BYTE) {
-          isSyncBytePatternCorrect = false;
-          break;
-        }
-      }
-      if (isSyncBytePatternCorrect) {
-        input.skipFully(startPosCandidate);
-        return true;
-      }
+    int peekLength = TS_PACKET_SIZE * (TsUtil.SNIFF_TS_PACKET_COUNT + 3);
+    input.peekFully(buffer, 0, peekLength);
+    int syncOffset = TsUtil.tryToFindSyncBytePosition(buffer, 0, peekLength, TS_PACKET_SIZE);
+    if (syncOffset < peekLength) {
+      input.skipFully(syncOffset);
+      return true;
     }
     return false;
   }
@@ -583,7 +574,7 @@ public final class TsExtractor implements Extractor {
    * <p>This may be a position beyond the buffer limit if the packet has not been read fully into
    * the buffer, or if no packet could be found within the buffer.
    */
-  private int findEndOfFirstTsPacketInBuffer() throws ParserException {
+  private int findEndOfFirstTsPacketInBuffer() {
     int searchStart = tsPacketBuffer.getPosition();
     int limit = tsPacketBuffer.limit();
     int syncBytePosition =
@@ -594,10 +585,6 @@ public final class TsExtractor implements Extractor {
     int endOfPacket = syncBytePosition + TS_PACKET_SIZE;
     if (endOfPacket > limit) {
       bytesSinceLastSync += syncBytePosition - searchStart;
-      if (mode == MODE_HLS && bytesSinceLastSync > TS_PACKET_SIZE * 2) {
-        throw ParserException.createForMalformedContainer(
-            "Cannot find sync byte. Most likely not a Transport Stream.", /* cause= */ null);
-      }
     } else {
       // We have found a packet within the buffer.
       bytesSinceLastSync = 0;
