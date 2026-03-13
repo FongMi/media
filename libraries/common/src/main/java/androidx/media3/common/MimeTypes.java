@@ -103,6 +103,7 @@ public final class MimeTypes {
   public static final String AUDIO_OGG = BASE_TYPE_AUDIO + "/ogg";
   public static final String AUDIO_WAV = BASE_TYPE_AUDIO + "/wav";
   public static final String AUDIO_MIDI = BASE_TYPE_AUDIO + "/midi";
+  public static final String AUDIO_AV3A = BASE_TYPE_AUDIO + "/av3a";
   @UnstableApi public static final String AUDIO_IAMF = BASE_TYPE_AUDIO + "/iamf";
 
   @UnstableApi
