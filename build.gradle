@@ -52,4 +52,10 @@ tasks.register('assembleLibs') {
             dependsOn "${subproject.path}:assembleRelease"
         }
     }
+    doLast {
+        exec {
+            commandLine 'cmd', '/c', 'move.bat'
+            workingDir rootDir
+        }
+    }
 }
