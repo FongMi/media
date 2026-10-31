@@ -295,16 +295,16 @@ public class MediaCodecVideoRendererTest {
   }
 
   @Test
-  public void skipAndDropOutputBuffer_withWorkaround_neverRenderToRealSurface() throws Exception {
+  public void skipOutputBuffer_withWorkaround_rendersToPrivateSurfaceAndRestoresOnRender()
+      throws Exception {
     List<Object> surfaceCalls = new ArrayList<>();
     MediaCodecVideoRenderer renderer = createInitializedRenderer(true, surfaceCalls);
     MediaCodecAdapter codec = mock(MediaCodecAdapter.class);
 
     renderer.skipOutputBuffer(codec, /* index= */ 1, /* presentationTimeUs= */ 0);
-    renderer.dropOutputBuffer(codec, /* index= */ 2, /* presentationTimeUs= */ 0);
+    renderer.skipOutputBuffer(codec, /* index= */ 2, /* presentationTimeUs= */ 0);
 
-    // Discarded buffers are released with render=true only while the codec outputs to the private
-    // surface, never to the real one, and the swap happens once.
+    // Skipped buffers are never rendered to the real surface, and the swap happens once.
     assertThat(surfaceCalls).hasSize(1);
     assertThat(surfaceCalls.get(0)).isNotSameInstanceAs(surface);
     verify(codec).releaseOutputBuffer(1, /* render= */ true);
@@ -318,11 +318,32 @@ public class MediaCodecVideoRendererTest {
     InOrder inOrder = inOrder(codec);
     inOrder.verify(codec).releaseOutputBuffer(2, /* render= */ true);
     inOrder.verify(codec).releaseOutputBuffer(3, 1000L);
+  }
 
-    // Discarding again after a render swaps to the private surface again.
-    renderer.skipOutputBuffer(codec, /* index= */ 4, /* presentationTimeUs= */ 0);
-    assertThat(surfaceCalls).hasSize(3);
-    assertThat(surfaceCalls.get(2)).isNotSameInstanceAs(surface);
+  @Test
+  public void dropOutputBuffer_withWorkaround_rendersWithoutSwitchingSurfaces() throws Exception {
+    List<Object> surfaceCalls = new ArrayList<>();
+    MediaCodecVideoRenderer renderer = createInitializedRenderer(true, surfaceCalls);
+    MediaCodecAdapter codec = mock(MediaCodecAdapter.class);
+
+    renderer.dropOutputBuffer(codec, /* index= */ 1, /* presentationTimeUs= */ 0);
+
+    verify(codec).releaseOutputBuffer(1, /* render= */ true);
+    assertThat(surfaceCalls).isEmpty();
+  }
+
+  @Test
+  public void dropOutputBuffer_afterSkipWithWorkaround_staysOnPrivateSurface() throws Exception {
+    List<Object> surfaceCalls = new ArrayList<>();
+    MediaCodecVideoRenderer renderer = createInitializedRenderer(true, surfaceCalls);
+    MediaCodecAdapter codec = mock(MediaCodecAdapter.class);
+
+    renderer.skipOutputBuffer(codec, /* index= */ 1, /* presentationTimeUs= */ 0);
+    renderer.dropOutputBuffer(codec, /* index= */ 2, /* presentationTimeUs= */ 0);
+
+    assertThat(surfaceCalls).hasSize(1);
+    assertThat(surfaceCalls.get(0)).isNotSameInstanceAs(surface);
+    verify(codec).releaseOutputBuffer(2, /* render= */ true);
   }
 
   @Test

@@ -2306,7 +2306,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
    */
   protected void skipOutputBuffer(MediaCodecAdapter codec, int index, long presentationTimeUs) {
     TraceUtil.beginSection("skipVideoBuffer");
-    releaseDiscardedOutputBuffer(codec, index);
+    releaseDiscardedOutputBuffer(codec, index, /* dropped= */ false);
     TraceUtil.endSection();
     decoderCounters.skippedOutputBufferCount++;
   }
@@ -2320,7 +2320,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
    */
   protected void dropOutputBuffer(MediaCodecAdapter codec, int index, long presentationTimeUs) {
     TraceUtil.beginSection("dropVideoBuffer");
-    releaseDiscardedOutputBuffer(codec, index);
+    releaseDiscardedOutputBuffer(codec, index, /* dropped= */ true);
     TraceUtil.endSection();
     updateDroppedBufferCounters(
         /* droppedInputBufferCount= */ 0, /* droppedDecoderBufferCount= */ 1);
@@ -2494,11 +2494,24 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
    * Releases a skipped or dropped output buffer without presenting it.
    *
    * <p>Decoders needing {@link #codecNeedsDiscardSurfaceWorkaround(String)} stop returning output
-   * unless every output buffer is released to a surface, so the buffer is rendered to a private
-   * surface that nobody reads instead of the codec's real output surface. The real surface is
-   * restored before the next buffer is rendered.
+   * unless every output buffer is released to a surface. Skipped buffers (decode-only, e.g. after a
+   * seek) are rendered to a private surface that nobody reads, so they are never presented or sent
+   * to a {@link VideoSink}. The real surface is restored before the next buffer is rendered.
+   *
+   * <p>Switching surfaces takes ~14ms on the affected decoder, so isolated dropped buffers are
+   * instead rendered to the real surface when there is no {@link VideoSink} (they are late, not
+   * pre-target, frames). With a {@link VideoSink} dropped buffers use the private surface.
    */
-  private void releaseDiscardedOutputBuffer(MediaCodecAdapter codec, int index) {
+  private void releaseDiscardedOutputBuffer(MediaCodecAdapter codec, int index, boolean dropped) {
+    if (codecNeedsDiscardSurfaceWorkaround
+        && dropped
+        && !codecOutputsToDiscardSurface
+        && videoSink == null
+        && displaySurface != null) {
+      // Switching surfaces takes ~14ms, too slow for the frequent isolated drops under GPU load.
+      codec.releaseOutputBuffer(index, /* render= */ true);
+      return;
+    }
     if (!codecNeedsDiscardSurfaceWorkaround || !switchCodecToDiscardSurface(codec)) {
       codec.releaseOutputBuffer(index, /* render= */ false);
       return;
