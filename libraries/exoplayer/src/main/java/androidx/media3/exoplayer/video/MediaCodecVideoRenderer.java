@@ -237,7 +237,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
 
   private @MonotonicNonNull CodecMaxValues codecMaxValues;
   private boolean codecNeedsSetOutputSurfaceWorkaround;
-  private boolean codecNeedsRenderSkippedBuffersWorkaround;
+  private boolean codecNeedsRenderDiscardedBuffersWorkaround;
   private boolean codecNeedsStripNonHdr10PlusT35Workaround;
   private boolean codecHandlesHdr10PlusOutOfBandMetadata;
   private boolean isApplyingContainerHagcMetadata;
@@ -1691,7 +1691,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
       long initializationDurationMs) {
     eventDispatcher.decoderInitialized(name, initializedTimestampMs, initializationDurationMs);
     codecNeedsSetOutputSurfaceWorkaround = codecNeedsSetOutputSurfaceWorkaround(name);
-    codecNeedsRenderSkippedBuffersWorkaround = codecNeedsRenderSkippedBuffersWorkaround(name);
+    codecNeedsRenderDiscardedBuffersWorkaround = codecNeedsRenderDiscardedBuffersWorkaround(name);
     codecHandlesHdr10PlusOutOfBandMetadata =
         checkNotNull(getCodecInfo()).isHdr10PlusOutOfBandMetadataSupported();
     codecNeedsStripNonHdr10PlusT35Workaround =
@@ -2300,9 +2300,9 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
    */
   protected void skipOutputBuffer(MediaCodecAdapter codec, int index, long presentationTimeUs) {
     TraceUtil.beginSection("skipVideoBuffer");
-    // Some decoders stop returning output after a seek unless skipped buffers are rendered.
+    // Some decoders stop returning output unless discarded buffers are rendered.
     codec.releaseOutputBuffer(
-        index, /* render= */ codecNeedsRenderSkippedBuffersWorkaround && displaySurface != null);
+        index, /* render= */ codecNeedsRenderDiscardedBuffersWorkaround && displaySurface != null);
     TraceUtil.endSection();
     decoderCounters.skippedOutputBufferCount++;
   }
@@ -2316,7 +2316,8 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
    */
   protected void dropOutputBuffer(MediaCodecAdapter codec, int index, long presentationTimeUs) {
     TraceUtil.beginSection("dropVideoBuffer");
-    codec.releaseOutputBuffer(index, false);
+    codec.releaseOutputBuffer(
+        index, /* render= */ codecNeedsRenderDiscardedBuffersWorkaround && displaySurface != null);
     TraceUtil.endSection();
     updateDroppedBufferCounters(
         /* droppedInputBufferCount= */ 0, /* droppedDecoderBufferCount= */ 1);
@@ -2901,16 +2902,16 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
   }
 
   /**
-   * Returns whether the decoder is known to stop producing output after a seek unless skipped
-   * output buffers are released with {@code render=true}.
+   * Returns whether the decoder is known to stop producing output unless skipped and dropped output
+   * buffers are released with {@code render=true}.
    *
    * <p>Observed with {@code OMX.rk.video_decoder.hevc} on Rockchip RK356x (Android 11) playing 4K
-   * HEVC Main10: after a seek the decoder accepts a fixed number of input buffers and then stalls
-   * while every pending output buffer is released without being rendered.
+   * HEVC Main10: after a seek (skipped buffers) or under GPU load (dropped buffers) the decoder
+   * stops returning output while every pending output buffer is released without being rendered.
    *
    * @param name The name of the codec.
    */
-  protected boolean codecNeedsRenderSkippedBuffersWorkaround(String name) {
+  protected boolean codecNeedsRenderDiscardedBuffersWorkaround(String name) {
     return name.startsWith("OMX.rk.video_decoder.");
   }
 

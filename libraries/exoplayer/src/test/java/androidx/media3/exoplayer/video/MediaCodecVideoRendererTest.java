@@ -279,20 +279,20 @@ public class MediaCodecVideoRendererTest {
   }
 
   @Test
-  public void codecNeedsRenderSkippedBuffersWorkaround_onlyForRockchipOmxDecoders() {
+  public void codecNeedsRenderDiscardedBuffersWorkaround_onlyForRockchipOmxDecoders() {
     assertThat(
-            mediaCodecVideoRenderer.codecNeedsRenderSkippedBuffersWorkaround(
+            mediaCodecVideoRenderer.codecNeedsRenderDiscardedBuffersWorkaround(
                 "OMX.rk.video_decoder.hevc"))
         .isTrue();
     assertThat(
-            mediaCodecVideoRenderer.codecNeedsRenderSkippedBuffersWorkaround(
+            mediaCodecVideoRenderer.codecNeedsRenderDiscardedBuffersWorkaround(
                 "OMX.rk.video_decoder.avc"))
         .isTrue();
-    assertThat(mediaCodecVideoRenderer.codecNeedsRenderSkippedBuffersWorkaround("c2.rk.hevc.decoder"))
+    assertThat(mediaCodecVideoRenderer.codecNeedsRenderDiscardedBuffersWorkaround("c2.rk.hevc.decoder"))
         .isFalse();
-    assertThat(mediaCodecVideoRenderer.codecNeedsRenderSkippedBuffersWorkaround("c2.android.hevc.decoder"))
+    assertThat(mediaCodecVideoRenderer.codecNeedsRenderDiscardedBuffersWorkaround("c2.android.hevc.decoder"))
         .isFalse();
-    assertThat(mediaCodecVideoRenderer.codecNeedsRenderSkippedBuffersWorkaround("OMX.google.h264.decoder"))
+    assertThat(mediaCodecVideoRenderer.codecNeedsRenderDiscardedBuffersWorkaround("OMX.google.h264.decoder"))
         .isFalse();
   }
 
