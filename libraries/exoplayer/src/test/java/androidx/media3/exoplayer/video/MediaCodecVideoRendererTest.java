@@ -45,6 +45,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -133,6 +134,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.InOrder;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.robolectric.Shadows;
@@ -279,21 +281,117 @@ public class MediaCodecVideoRendererTest {
   }
 
   @Test
-  public void codecNeedsRenderDiscardedBuffersWorkaround_onlyForRockchipOmxDecoders() {
+  public void codecNeedsDiscardSurfaceWorkaround_onlyForRockchipOmxHevcDecoder() {
     assertThat(
-            mediaCodecVideoRenderer.codecNeedsRenderDiscardedBuffersWorkaround(
-                "OMX.rk.video_decoder.hevc"))
+            mediaCodecVideoRenderer.codecNeedsDiscardSurfaceWorkaround("OMX.rk.video_decoder.hevc"))
         .isTrue();
     assertThat(
-            mediaCodecVideoRenderer.codecNeedsRenderDiscardedBuffersWorkaround(
-                "OMX.rk.video_decoder.avc"))
-        .isTrue();
-    assertThat(mediaCodecVideoRenderer.codecNeedsRenderDiscardedBuffersWorkaround("c2.rk.hevc.decoder"))
+            mediaCodecVideoRenderer.codecNeedsDiscardSurfaceWorkaround("OMX.rk.video_decoder.avc"))
         .isFalse();
-    assertThat(mediaCodecVideoRenderer.codecNeedsRenderDiscardedBuffersWorkaround("c2.android.hevc.decoder"))
+    assertThat(mediaCodecVideoRenderer.codecNeedsDiscardSurfaceWorkaround("c2.rk.hevc.decoder"))
         .isFalse();
-    assertThat(mediaCodecVideoRenderer.codecNeedsRenderDiscardedBuffersWorkaround("OMX.google.h264.decoder"))
+    assertThat(mediaCodecVideoRenderer.codecNeedsDiscardSurfaceWorkaround("OMX.google.h264.decoder"))
         .isFalse();
+  }
+
+  @Test
+  public void skipAndDropOutputBuffer_withWorkaround_neverRenderToRealSurface() throws Exception {
+    List<Object> surfaceCalls = new ArrayList<>();
+    MediaCodecVideoRenderer renderer = createInitializedRenderer(true, surfaceCalls);
+    MediaCodecAdapter codec = mock(MediaCodecAdapter.class);
+
+    renderer.skipOutputBuffer(codec, /* index= */ 1, /* presentationTimeUs= */ 0);
+    renderer.dropOutputBuffer(codec, /* index= */ 2, /* presentationTimeUs= */ 0);
+
+    // Discarded buffers are released with render=true only while the codec outputs to the private
+    // surface, never to the real one, and the swap happens once.
+    assertThat(surfaceCalls).hasSize(1);
+    assertThat(surfaceCalls.get(0)).isNotSameInstanceAs(surface);
+    verify(codec).releaseOutputBuffer(1, /* render= */ true);
+    verify(codec).releaseOutputBuffer(2, /* render= */ true);
+
+    // Rendering a frame restores the real surface before the buffer is released.
+    renderer.renderOutputBufferV21(codec, /* index= */ 3, /* presentationTimeUs= */ 0, 1000L);
+
+    assertThat(surfaceCalls).hasSize(2);
+    assertThat(surfaceCalls.get(1)).isSameInstanceAs(surface);
+    InOrder inOrder = inOrder(codec);
+    inOrder.verify(codec).releaseOutputBuffer(2, /* render= */ true);
+    inOrder.verify(codec).releaseOutputBuffer(3, 1000L);
+
+    // Discarding again after a render swaps to the private surface again.
+    renderer.skipOutputBuffer(codec, /* index= */ 4, /* presentationTimeUs= */ 0);
+    assertThat(surfaceCalls).hasSize(3);
+    assertThat(surfaceCalls.get(2)).isNotSameInstanceAs(surface);
+  }
+
+  @Test
+  public void skipAndDropOutputBuffer_withoutWorkaround_releaseWithoutRendering() throws Exception {
+    List<Object> surfaceCalls = new ArrayList<>();
+    MediaCodecVideoRenderer renderer = createInitializedRenderer(false, surfaceCalls);
+    MediaCodecAdapter codec = mock(MediaCodecAdapter.class);
+
+    renderer.skipOutputBuffer(codec, /* index= */ 1, /* presentationTimeUs= */ 0);
+    renderer.dropOutputBuffer(codec, /* index= */ 2, /* presentationTimeUs= */ 0);
+
+    verify(codec).releaseOutputBuffer(1, /* render= */ false);
+    verify(codec).releaseOutputBuffer(2, /* render= */ false);
+    assertThat(surfaceCalls).isEmpty();
+  }
+
+  private MediaCodecVideoRenderer createInitializedRenderer(
+      boolean needsWorkaround, List<Object> surfaceCalls) throws Exception {
+    MediaCodecVideoRenderer renderer =
+        new MediaCodecVideoRenderer(
+            new MediaCodecVideoRenderer.Builder(ApplicationProvider.getApplicationContext())
+                .setCodecAdapterFactory(codecAdapterFactory)
+                .setMediaCodecSelector(mediaCodecSelector)
+                .setEnableDecoderFallback(false)) {
+          @Override
+          protected @Capabilities int supportsFormat(
+              MediaCodecSelector mediaCodecSelector, Format format) {
+            return RendererCapabilities.create(C.FORMAT_HANDLED);
+          }
+
+          @Override
+          protected boolean codecNeedsDiscardSurfaceWorkaround(String name) {
+            return needsWorkaround;
+          }
+
+          @Override
+          protected void setOutputSurfaceV23(MediaCodecAdapter codec, Surface surface) {
+            surfaceCalls.add(surface);
+          }
+        };
+    renderer.init(/* index= */ 0, PlayerId.UNSET, Clock.DEFAULT);
+    renderer.handleMessage(Renderer.MSG_SET_VIDEO_OUTPUT, surface);
+    FakeSampleStream fakeSampleStream =
+        new FakeSampleStream(
+            new DefaultAllocator(/* trimOnReset= */ true, /* individualAllocationSize= */ 1024),
+            /* mediaSourceEventDispatcher= */ null,
+            DrmSessionManager.DRM_UNSUPPORTED,
+            new DrmSessionEventListener.EventDispatcher(),
+            /* initialFormat= */ VIDEO_H264,
+            ImmutableList.of(oneByteSample(/* timeUs= */ 0, C.BUFFER_FLAG_KEY_FRAME)));
+    fakeSampleStream.writeData(/* startPositionUs= */ 0);
+    renderer.enable(
+        RendererConfiguration.DEFAULT,
+        new Format[] {VIDEO_H264},
+        fakeSampleStream,
+        /* positionUs= */ 0,
+        /* joining= */ false,
+        /* mayRenderStartOfStream= */ true,
+        /* startPositionUs= */ 0,
+        /* offsetUs= */ 0,
+        new MediaSource.MediaPeriodId(new Object()));
+    renderer.start();
+    for (int i = 0; i < 3; i++) {
+      renderer.render(/* positionUs= */ 0, SystemClock.elapsedRealtime() * 1000);
+      codecAdapterFactory.idleQueueingAndCallbackThreads();
+      ShadowLooper.idleMainLooper();
+    }
+    surfaceCalls.clear();
+    return renderer;
   }
 
   @Test
