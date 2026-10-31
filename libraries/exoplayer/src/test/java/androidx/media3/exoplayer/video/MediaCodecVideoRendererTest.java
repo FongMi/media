@@ -279,6 +279,24 @@ public class MediaCodecVideoRendererTest {
   }
 
   @Test
+  public void codecNeedsRenderSkippedBuffersWorkaround_onlyForRockchipOmxDecoders() {
+    assertThat(
+            mediaCodecVideoRenderer.codecNeedsRenderSkippedBuffersWorkaround(
+                "OMX.rk.video_decoder.hevc"))
+        .isTrue();
+    assertThat(
+            mediaCodecVideoRenderer.codecNeedsRenderSkippedBuffersWorkaround(
+                "OMX.rk.video_decoder.avc"))
+        .isTrue();
+    assertThat(mediaCodecVideoRenderer.codecNeedsRenderSkippedBuffersWorkaround("c2.rk.hevc.decoder"))
+        .isFalse();
+    assertThat(mediaCodecVideoRenderer.codecNeedsRenderSkippedBuffersWorkaround("c2.android.hevc.decoder"))
+        .isFalse();
+    assertThat(mediaCodecVideoRenderer.codecNeedsRenderSkippedBuffersWorkaround("OMX.google.h264.decoder"))
+        .isFalse();
+  }
+
+  @Test
   public void render_withSkippedInputBuffers_updatesFrameRateEstimator() throws Exception {
     Format formatNoFrameRate = VIDEO_H264.buildUpon().setFrameRate(Format.NO_VALUE).build();
     List<FakeSampleStream.FakeSampleStreamItem> samples = new ArrayList<>();

@@ -237,6 +237,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
 
   private @MonotonicNonNull CodecMaxValues codecMaxValues;
   private boolean codecNeedsSetOutputSurfaceWorkaround;
+  private boolean codecNeedsRenderSkippedBuffersWorkaround;
   private boolean codecNeedsStripNonHdr10PlusT35Workaround;
   private boolean codecHandlesHdr10PlusOutOfBandMetadata;
   private boolean isApplyingContainerHagcMetadata;
@@ -1690,6 +1691,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
       long initializationDurationMs) {
     eventDispatcher.decoderInitialized(name, initializedTimestampMs, initializationDurationMs);
     codecNeedsSetOutputSurfaceWorkaround = codecNeedsSetOutputSurfaceWorkaround(name);
+    codecNeedsRenderSkippedBuffersWorkaround = codecNeedsRenderSkippedBuffersWorkaround(name);
     codecHandlesHdr10PlusOutOfBandMetadata =
         checkNotNull(getCodecInfo()).isHdr10PlusOutOfBandMetadataSupported();
     codecNeedsStripNonHdr10PlusT35Workaround =
@@ -2298,7 +2300,9 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
    */
   protected void skipOutputBuffer(MediaCodecAdapter codec, int index, long presentationTimeUs) {
     TraceUtil.beginSection("skipVideoBuffer");
-    codec.releaseOutputBuffer(index, false);
+    // Some decoders stop returning output after a seek unless skipped buffers are rendered.
+    codec.releaseOutputBuffer(
+        index, /* render= */ codecNeedsRenderSkippedBuffersWorkaround && displaySurface != null);
     TraceUtil.endSection();
     decoderCounters.skippedOutputBufferCount++;
   }
@@ -2894,6 +2898,20 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
       }
     }
     return deviceNeedsSetOutputSurfaceWorkaround;
+  }
+
+  /**
+   * Returns whether the decoder is known to stop producing output after a seek unless skipped
+   * output buffers are released with {@code render=true}.
+   *
+   * <p>Observed with {@code OMX.rk.video_decoder.hevc} on Rockchip RK356x (Android 11) playing 4K
+   * HEVC Main10: after a seek the decoder accepts a fixed number of input buffers and then stalls
+   * while every pending output buffer is released without being rendered.
+   *
+   * @param name The name of the codec.
+   */
+  protected boolean codecNeedsRenderSkippedBuffersWorkaround(String name) {
+    return name.startsWith("OMX.rk.video_decoder.");
   }
 
   /** Returns the output surface. */
