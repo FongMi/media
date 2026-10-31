@@ -1337,6 +1337,9 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
       boolean surfaceReplacedSeamlessly = false;
       if (codec != null) {
         if (videoSink == null) {
+          // The codec output is about to move to the new surface (or a new codec), so it is no
+          // longer on the private discard surface.
+          codecOutputsToDiscardSurface = false;
           MediaCodecInfo codecInfo = checkNotNull(getCodecInfo());
           boolean canUpdateSurface = hasSurfaceForCodec(codecInfo);
           if (canUpdateSurface && !codecNeedsSetOutputSurfaceWorkaround) {
@@ -2988,7 +2991,8 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
    * @param name The name of the codec.
    */
   protected boolean codecNeedsDiscardSurfaceWorkaround(String name) {
-    return SDK_INT >= 23 && name.equals("OMX.rk.video_decoder.hevc");
+    // SurfaceTexture(boolean) requires API 26.
+    return SDK_INT >= 26 && name.equals("OMX.rk.video_decoder.hevc");
   }
 
   /** Returns the output surface. */

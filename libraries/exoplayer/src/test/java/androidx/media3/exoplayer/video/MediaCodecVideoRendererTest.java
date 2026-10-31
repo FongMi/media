@@ -42,6 +42,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assume.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
@@ -281,6 +282,7 @@ public class MediaCodecVideoRendererTest {
   }
 
   @Test
+  @Config(minSdk = 26)
   public void codecNeedsDiscardSurfaceWorkaround_onlyForRockchipOmxHevcDecoder() {
     assertThat(
             mediaCodecVideoRenderer.codecNeedsDiscardSurfaceWorkaround("OMX.rk.video_decoder.hevc"))
@@ -292,6 +294,43 @@ public class MediaCodecVideoRendererTest {
         .isFalse();
     assertThat(mediaCodecVideoRenderer.codecNeedsDiscardSurfaceWorkaround("OMX.google.h264.decoder"))
         .isFalse();
+  }
+
+  @Test
+  @Config(maxSdk = 25)
+  public void codecNeedsDiscardSurfaceWorkaround_belowApi26_isFalse() {
+    assertThat(
+            mediaCodecVideoRenderer.codecNeedsDiscardSurfaceWorkaround("OMX.rk.video_decoder.hevc"))
+        .isFalse();
+  }
+
+  @Test
+  @Config(minSdk = 26)
+  public void skipOutputBuffer_afterOutputSurfaceReplaced_switchesToPrivateSurfaceAgain()
+      throws Exception {
+    List<Object> surfaceCalls = new ArrayList<>();
+    MediaCodecVideoRenderer renderer = createInitializedRenderer(true, surfaceCalls);
+    MediaCodecAdapter codec = mock(MediaCodecAdapter.class);
+    Surface newSurface =
+        new Surface(new SurfaceTexture(/* texName= */ 1)) {
+          @Override
+          public boolean isValid() {
+            return true;
+          }
+        };
+
+    renderer.skipOutputBuffer(codec, /* index= */ 1, /* presentationTimeUs= */ 0);
+    renderer.handleMessage(Renderer.MSG_SET_VIDEO_OUTPUT, newSurface);
+    renderer.skipOutputBuffer(codec, /* index= */ 2, /* presentationTimeUs= */ 0);
+
+    // discard -> private, replace -> new surface, discard again -> private (not the new surface).
+    assertThat(surfaceCalls).hasSize(3);
+    assertThat(surfaceCalls.get(0)).isNotSameInstanceAs(surface);
+    assertThat(surfaceCalls.get(1)).isSameInstanceAs(newSurface);
+    assertThat(surfaceCalls.get(2)).isNotSameInstanceAs(newSurface);
+    assertThat(surfaceCalls.get(2)).isSameInstanceAs(surfaceCalls.get(0));
+    verify(codec, times(2)).releaseOutputBuffer(anyInt(), eq(true));
+    newSurface.release();
   }
 
   @Test
