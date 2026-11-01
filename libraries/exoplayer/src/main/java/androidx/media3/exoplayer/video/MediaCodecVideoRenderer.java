@@ -36,7 +36,6 @@ import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.content.Context;
 import android.graphics.Point;
-import android.graphics.SurfaceTexture;
 import android.hardware.display.DisplayManager;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo.CodecCapabilities;
@@ -239,7 +238,6 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
   private @MonotonicNonNull CodecMaxValues codecMaxValues;
   private boolean codecNeedsSetOutputSurfaceWorkaround;
   private boolean codecNeedsDiscardSurfaceWorkaround;
-  @Nullable private SurfaceTexture discardSurfaceTexture;
   @Nullable private Surface discardSurface;
   private boolean codecOutputsToDiscardSurface;
   private boolean codecNeedsStripNonHdr10PlusT35Workaround;
@@ -2188,11 +2186,15 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
       MediaCodecAdapter codec, int bufferIndex, long presentationTimeUs, Format format) {
     long releaseTimeNs = videoFrameReleaseInfo.getReleaseTimeNs();
     long earlyUs = videoFrameReleaseInfo.getEarlyUs();
-    if (shouldSkipBuffersWithIdenticalReleaseTime() && releaseTimeNs == lastFrameReleaseTimeNs) {
+    if (shouldSkipBuffersWithIdenticalReleaseTime()
+        && releaseTimeNs == lastFrameReleaseTimeNs
+        && !codecNeedsDiscardSurfaceWorkaround) {
       // This frame should be displayed on the same vsync with the previous released frame. We
       // are likely rendering frames at a rate higher than the screen refresh rate. Skip
       // this buffer so that it's returned to MediaCodec sooner otherwise MediaCodec may not
-      // be able to keep decoding with this rate [b/263454203].
+      // be able to keep decoding with this rate [b/263454203]. Decoders needing the discard
+      // surface workaround render these frames instead, as skipping them would repeatedly switch
+      // between the discard surface and the real surface.
       skipOutputBuffer(codec, bufferIndex, presentationTimeUs);
     } else {
       notifyFrameMetadataListener(presentationTimeUs, releaseTimeNs, format);
@@ -2532,8 +2534,12 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
     }
     try {
       if (discardSurface == null) {
-        discardSurfaceTexture = new SurfaceTexture(/* singleBufferMode= */ false);
-        discardSurface = new Surface(discardSurfaceTexture);
+        // A PlaceholderSurface consumes the frames queued to it, so buffers rendered to it are
+        // always returned to the codec, including when frame dropping is disabled.
+        if (codecInfo.secure && !PlaceholderSurface.isSecureSupported(context)) {
+          return false;
+        }
+        discardSurface = createDiscardSurface(codecInfo.secure);
       }
       setOutputSurface(codec, discardSurface);
       codecOutputsToDiscardSurface = true;
@@ -2542,6 +2548,11 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
       Log.w(TAG, "Failed to switch to the discard surface", e);
       return false;
     }
+  }
+
+  /** Returns a surface that consumes and discards all frames rendered to it. */
+  protected Surface createDiscardSurface(boolean secure) {
+    return PlaceholderSurface.newInstance(context, secure);
   }
 
   private void restoreCodecOutputSurface(MediaCodecAdapter codec) {
@@ -2558,10 +2569,6 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
     if (discardSurface != null) {
       discardSurface.release();
       discardSurface = null;
-    }
-    if (discardSurfaceTexture != null) {
-      discardSurfaceTexture.release();
-      discardSurfaceTexture = null;
     }
   }
 
@@ -2991,7 +2998,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
    * @param name The name of the codec.
    */
   protected boolean codecNeedsDiscardSurfaceWorkaround(String name) {
-    // SurfaceTexture(boolean) requires API 26.
+    // Only observed on API 30. Older versions are unverified, so the workaround is not applied.
     return SDK_INT >= 26 && name.equals("OMX.rk.video_decoder.hevc");
   }
 
