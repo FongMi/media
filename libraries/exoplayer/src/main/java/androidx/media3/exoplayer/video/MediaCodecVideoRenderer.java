@@ -237,6 +237,9 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
 
   private @MonotonicNonNull CodecMaxValues codecMaxValues;
   private boolean codecNeedsSetOutputSurfaceWorkaround;
+  private boolean codecNeedsDiscardSurfaceWorkaround;
+  @Nullable private Surface discardSurface;
+  private boolean codecOutputsToDiscardSurface;
   private boolean codecNeedsStripNonHdr10PlusT35Workaround;
   private boolean codecHandlesHdr10PlusOutOfBandMetadata;
   private boolean isApplyingContainerHagcMetadata;
@@ -1224,6 +1227,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
       nextOutputBufferToProcessPresentationTimeUs = C.TIME_UNSET;
       isApplyingContainerHagcMetadata = false;
       releasePlaceholderSurface();
+      releaseDiscardSurface();
     }
   }
 
@@ -1331,6 +1335,9 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
       boolean surfaceReplacedSeamlessly = false;
       if (codec != null) {
         if (videoSink == null) {
+          // The codec output is about to move to the new surface (or a new codec), so it is no
+          // longer on the private discard surface.
+          codecOutputsToDiscardSurface = false;
           MediaCodecInfo codecInfo = checkNotNull(getCodecInfo());
           boolean canUpdateSurface = hasSurfaceForCodec(codecInfo);
           if (canUpdateSurface && !codecNeedsSetOutputSurfaceWorkaround) {
@@ -1690,6 +1697,8 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
       long initializationDurationMs) {
     eventDispatcher.decoderInitialized(name, initializedTimestampMs, initializationDurationMs);
     codecNeedsSetOutputSurfaceWorkaround = codecNeedsSetOutputSurfaceWorkaround(name);
+    codecNeedsDiscardSurfaceWorkaround = codecNeedsDiscardSurfaceWorkaround(name);
+    codecOutputsToDiscardSurface = false;
     codecHandlesHdr10PlusOutOfBandMetadata =
         checkNotNull(getCodecInfo()).isHdr10PlusOutOfBandMetadataSupported();
     codecNeedsStripNonHdr10PlusT35Workaround =
@@ -2177,11 +2186,15 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
       MediaCodecAdapter codec, int bufferIndex, long presentationTimeUs, Format format) {
     long releaseTimeNs = videoFrameReleaseInfo.getReleaseTimeNs();
     long earlyUs = videoFrameReleaseInfo.getEarlyUs();
-    if (shouldSkipBuffersWithIdenticalReleaseTime() && releaseTimeNs == lastFrameReleaseTimeNs) {
+    if (shouldSkipBuffersWithIdenticalReleaseTime()
+        && releaseTimeNs == lastFrameReleaseTimeNs
+        && !codecNeedsDiscardSurfaceWorkaround) {
       // This frame should be displayed on the same vsync with the previous released frame. We
       // are likely rendering frames at a rate higher than the screen refresh rate. Skip
       // this buffer so that it's returned to MediaCodec sooner otherwise MediaCodec may not
-      // be able to keep decoding with this rate [b/263454203].
+      // be able to keep decoding with this rate [b/263454203]. Decoders needing the discard
+      // surface workaround render these frames instead, as skipping them would repeatedly switch
+      // between the discard surface and the real surface.
       skipOutputBuffer(codec, bufferIndex, presentationTimeUs);
     } else {
       notifyFrameMetadataListener(presentationTimeUs, releaseTimeNs, format);
@@ -2298,7 +2311,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
    */
   protected void skipOutputBuffer(MediaCodecAdapter codec, int index, long presentationTimeUs) {
     TraceUtil.beginSection("skipVideoBuffer");
-    codec.releaseOutputBuffer(index, false);
+    releaseDiscardedOutputBuffer(codec, index, /* dropped= */ false);
     TraceUtil.endSection();
     decoderCounters.skippedOutputBufferCount++;
   }
@@ -2312,7 +2325,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
    */
   protected void dropOutputBuffer(MediaCodecAdapter codec, int index, long presentationTimeUs) {
     TraceUtil.beginSection("dropVideoBuffer");
-    codec.releaseOutputBuffer(index, false);
+    releaseDiscardedOutputBuffer(codec, index, /* dropped= */ true);
     TraceUtil.endSection();
     updateDroppedBufferCounters(
         /* droppedInputBufferCount= */ 0, /* droppedDecoderBufferCount= */ 1);
@@ -2470,6 +2483,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
    */
   protected void renderOutputBufferV21(
       MediaCodecAdapter codec, int index, long presentationTimeUs, long releaseTimeNs) {
+    restoreCodecOutputSurface(codec);
     TraceUtil.beginSection("releaseOutputBuffer");
     codec.releaseOutputBuffer(index, releaseTimeNs);
     TraceUtil.endSection();
@@ -2478,6 +2492,83 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
     if (videoSink == null) {
       maybeNotifyVideoSizeChanged(decodedVideoSize);
       maybeNotifyRenderedFirstFrame();
+    }
+  }
+
+  /**
+   * Releases a skipped or dropped output buffer without presenting it.
+   *
+   * <p>Decoders needing {@link #codecNeedsDiscardSurfaceWorkaround(String)} stop returning output
+   * unless every output buffer is released to a surface. Skipped buffers (decode-only, e.g. after a
+   * seek) are rendered to a private surface that nobody reads, so they are never presented or sent
+   * to a {@link VideoSink}. The real surface is restored before the next buffer is rendered.
+   *
+   * <p>Switching surfaces takes ~14ms on the affected decoder, so isolated dropped buffers are
+   * instead rendered to the real surface when there is no {@link VideoSink} (they are late, not
+   * pre-target, frames). With a {@link VideoSink} dropped buffers use the private surface.
+   */
+  private void releaseDiscardedOutputBuffer(MediaCodecAdapter codec, int index, boolean dropped) {
+    if (codecNeedsDiscardSurfaceWorkaround
+        && dropped
+        && !codecOutputsToDiscardSurface
+        && videoSink == null
+        && displaySurface != null) {
+      // Switching surfaces takes ~14ms, too slow for the frequent isolated drops under GPU load.
+      codec.releaseOutputBuffer(index, /* render= */ true);
+      return;
+    }
+    if (!codecNeedsDiscardSurfaceWorkaround || !switchCodecToDiscardSurface(codec)) {
+      codec.releaseOutputBuffer(index, /* render= */ false);
+      return;
+    }
+    codec.releaseOutputBuffer(index, /* render= */ true);
+  }
+
+  private boolean switchCodecToDiscardSurface(MediaCodecAdapter codec) {
+    if (codecOutputsToDiscardSurface) {
+      return true;
+    }
+    MediaCodecInfo codecInfo = getCodecInfo();
+    if (codecInfo == null || !hasSurfaceForCodec(codecInfo) || getSurfaceForCodec(codecInfo) == null) {
+      return false;
+    }
+    try {
+      if (discardSurface == null) {
+        // A PlaceholderSurface consumes the frames queued to it, so buffers rendered to it are
+        // always returned to the codec, including when frame dropping is disabled.
+        if (codecInfo.secure && !PlaceholderSurface.isSecureSupported(context)) {
+          return false;
+        }
+        discardSurface = createDiscardSurface(codecInfo.secure);
+      }
+      setOutputSurface(codec, discardSurface);
+      codecOutputsToDiscardSurface = true;
+      return true;
+    } catch (RuntimeException e) {
+      Log.w(TAG, "Failed to switch to the discard surface", e);
+      return false;
+    }
+  }
+
+  /** Returns a surface that consumes and discards all frames rendered to it. */
+  protected Surface createDiscardSurface(boolean secure) {
+    return PlaceholderSurface.newInstance(context, secure);
+  }
+
+  private void restoreCodecOutputSurface(MediaCodecAdapter codec) {
+    if (!codecOutputsToDiscardSurface) {
+      return;
+    }
+    codecOutputsToDiscardSurface = false;
+    MediaCodecInfo codecInfo = checkNotNull(getCodecInfo());
+    setOutputSurface(codec, getSurfaceForCodec(codecInfo));
+  }
+
+  private void releaseDiscardSurface() {
+    codecOutputsToDiscardSurface = false;
+    if (discardSurface != null) {
+      discardSurface.release();
+      discardSurface = null;
     }
   }
 
@@ -2894,6 +2985,21 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
       }
     }
     return deviceNeedsSetOutputSurfaceWorkaround;
+  }
+
+  /**
+   * Returns whether the decoder is known to stop returning output after about 14 output buffers
+   * have been released without being rendered, which happens after seeks (skipped buffers) and
+   * under GPU load (dropped buffers).
+   *
+   * <p>Observed with {@code OMX.rk.video_decoder.hevc} on Rockchip RK356x (Android 11) playing 4K
+   * HEVC Main10.
+   *
+   * @param name The name of the codec.
+   */
+  protected boolean codecNeedsDiscardSurfaceWorkaround(String name) {
+    // Only observed on API 30. Older versions are unverified, so the workaround is not applied.
+    return SDK_INT >= 26 && name.equals("OMX.rk.video_decoder.hevc");
   }
 
   /** Returns the output surface. */

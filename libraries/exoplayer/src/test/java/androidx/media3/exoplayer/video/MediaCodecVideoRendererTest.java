@@ -42,13 +42,17 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assume.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 import static org.robolectric.Shadows.shadowOf;
 
@@ -133,6 +137,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.InOrder;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.robolectric.Shadows;
@@ -276,6 +281,531 @@ public class MediaCodecVideoRendererTest {
   @After
   public void cleanUp() {
     surface.release();
+  }
+
+  @Test
+  @Config(minSdk = 26)
+  public void codecNeedsDiscardSurfaceWorkaround_onlyForRockchipOmxHevcDecoder() {
+    assertThat(
+            mediaCodecVideoRenderer.codecNeedsDiscardSurfaceWorkaround("OMX.rk.video_decoder.hevc"))
+        .isTrue();
+    assertThat(
+            mediaCodecVideoRenderer.codecNeedsDiscardSurfaceWorkaround("OMX.rk.video_decoder.avc"))
+        .isFalse();
+    assertThat(mediaCodecVideoRenderer.codecNeedsDiscardSurfaceWorkaround("c2.rk.hevc.decoder"))
+        .isFalse();
+    assertThat(mediaCodecVideoRenderer.codecNeedsDiscardSurfaceWorkaround("OMX.google.h264.decoder"))
+        .isFalse();
+  }
+
+  @Test
+  @Config(maxSdk = 25)
+  public void codecNeedsDiscardSurfaceWorkaround_belowApi26_isFalse() {
+    assertThat(
+            mediaCodecVideoRenderer.codecNeedsDiscardSurfaceWorkaround("OMX.rk.video_decoder.hevc"))
+        .isFalse();
+  }
+
+  @Test
+  @Config(minSdk = 26)
+  public void skipOutputBuffer_afterOutputSurfaceReplaced_switchesToPrivateSurfaceAgain()
+      throws Exception {
+    List<Object> surfaceCalls = new ArrayList<>();
+    MediaCodecVideoRenderer renderer = createInitializedRenderer(true, surfaceCalls);
+    MediaCodecAdapter codec = newTracingCodec();
+    Surface newSurface =
+        new Surface(new SurfaceTexture(/* texName= */ 1)) {
+          @Override
+          public boolean isValid() {
+            return true;
+          }
+        };
+
+    renderer.skipOutputBuffer(codec, /* index= */ 1, /* presentationTimeUs= */ 0);
+    renderer.handleMessage(Renderer.MSG_SET_VIDEO_OUTPUT, newSurface);
+    renderer.skipOutputBuffer(codec, /* index= */ 2, /* presentationTimeUs= */ 0);
+
+    // discard -> private, replace -> new surface, discard again -> private (not the new surface).
+    assertThat(surfaceCalls).hasSize(3);
+    assertThat(surfaceCalls.get(0)).isNotSameInstanceAs(surface);
+    assertThat(surfaceCalls.get(1)).isSameInstanceAs(newSurface);
+    assertThat(surfaceCalls.get(2)).isNotSameInstanceAs(newSurface);
+    assertThat(surfaceCalls.get(2)).isSameInstanceAs(surfaceCalls.get(0));
+    verify(codec, times(2)).releaseOutputBuffer(anyInt(), eq(true));
+    newSurface.release();
+  }
+
+  @Test
+  public void skipOutputBuffer_withWorkaround_rendersToPrivateSurfaceAndRestoresOnRender()
+      throws Exception {
+    List<Object> surfaceCalls = new ArrayList<>();
+    MediaCodecVideoRenderer renderer = createInitializedRenderer(true, surfaceCalls);
+    MediaCodecAdapter codec = newTracingCodec();
+
+    renderer.skipOutputBuffer(codec, /* index= */ 1, /* presentationTimeUs= */ 0);
+    renderer.skipOutputBuffer(codec, /* index= */ 2, /* presentationTimeUs= */ 0);
+
+    // Skipped buffers are never rendered to the real surface, and the swap happens once.
+    assertThat(surfaceCalls).hasSize(1);
+    assertThat(surfaceCalls.get(0)).isNotSameInstanceAs(surface);
+    verify(codec).releaseOutputBuffer(1, /* render= */ true);
+    verify(codec).releaseOutputBuffer(2, /* render= */ true);
+
+    // Rendering a frame restores the real surface before the buffer is released.
+    renderer.renderOutputBufferV21(codec, /* index= */ 3, /* presentationTimeUs= */ 0, 1000L);
+
+    assertThat(surfaceCalls).hasSize(2);
+    assertThat(surfaceCalls.get(1)).isSameInstanceAs(surface);
+    assertThat(releaseOf(2).activeSurface).isSameInstanceAs(surfaceCalls.get(0));
+    assertThat(releaseOf(3).activeSurface).isSameInstanceAs(surface);
+  }
+
+  @Test
+  public void dropOutputBuffer_withWorkaround_rendersWithoutSwitchingSurfaces() throws Exception {
+    List<Object> surfaceCalls = new ArrayList<>();
+    MediaCodecVideoRenderer renderer = createInitializedRenderer(true, surfaceCalls);
+    MediaCodecAdapter codec = newTracingCodec();
+
+    renderer.dropOutputBuffer(codec, /* index= */ 1, /* presentationTimeUs= */ 0);
+
+    verify(codec).releaseOutputBuffer(1, /* render= */ true);
+    assertThat(surfaceCalls).isEmpty();
+  }
+
+  @Test
+  public void dropOutputBuffer_afterSkipWithWorkaround_staysOnPrivateSurface() throws Exception {
+    List<Object> surfaceCalls = new ArrayList<>();
+    MediaCodecVideoRenderer renderer = createInitializedRenderer(true, surfaceCalls);
+    MediaCodecAdapter codec = newTracingCodec();
+
+    renderer.skipOutputBuffer(codec, /* index= */ 1, /* presentationTimeUs= */ 0);
+    renderer.dropOutputBuffer(codec, /* index= */ 2, /* presentationTimeUs= */ 0);
+
+    assertThat(surfaceCalls).hasSize(1);
+    assertThat(surfaceCalls.get(0)).isNotSameInstanceAs(surface);
+    verify(codec).releaseOutputBuffer(2, /* render= */ true);
+  }
+
+  @Test
+  public void skipAndDropOutputBuffer_withoutWorkaround_releaseWithoutRendering() throws Exception {
+    List<Object> surfaceCalls = new ArrayList<>();
+    MediaCodecVideoRenderer renderer = createInitializedRenderer(false, surfaceCalls);
+    MediaCodecAdapter codec = newTracingCodec();
+
+    renderer.skipOutputBuffer(codec, /* index= */ 1, /* presentationTimeUs= */ 0);
+    renderer.dropOutputBuffer(codec, /* index= */ 2, /* presentationTimeUs= */ 0);
+
+    verify(codec).releaseOutputBuffer(1, /* render= */ false);
+    verify(codec).releaseOutputBuffer(2, /* render= */ false);
+    assertThat(surfaceCalls).isEmpty();
+  }
+
+  @Test
+  @Config(minSdk = 26)
+  public void sameVsyncFrames_withWorkaround_areRenderedWithoutSurfaceSwitches() throws Exception {
+    List<Object> surfaceCalls = new ArrayList<>();
+    MediaCodecVideoRenderer renderer = createInitializedRenderer(true, surfaceCalls);
+    MediaCodecAdapter codec = newTracingCodec();
+
+    // 120 frames over 60 vsyncs: two consecutive frames share every release time.
+    for (int i = 0; i < 120; i++) {
+      invokeReleaseFrame(renderer, codec, i, 1_000_000L * (i / 2 + 1));
+    }
+
+    assertThat(surfaceCalls).isEmpty();
+    assertThat(releases).hasSize(120);
+    for (Release release : releases) {
+      assertThat(release.render).isTrue();
+      assertThat(release.activeSurface).isSameInstanceAs(surface);
+    }
+  }
+
+  @Test
+  @Config(minSdk = 26)
+  public void sameVsyncFrames_withoutWorkaround_stillSkipDuplicates() throws Exception {
+    List<Object> surfaceCalls = new ArrayList<>();
+    MediaCodecVideoRenderer renderer = createInitializedRenderer(false, surfaceCalls);
+    MediaCodecAdapter codec = newTracingCodec();
+
+    for (int i = 0; i < 120; i++) {
+      invokeReleaseFrame(renderer, codec, i, 1_000_000L * (i / 2 + 1));
+    }
+
+    long skipped = releases.stream().filter(r -> !r.render).count();
+    assertThat(skipped).isEqualTo(60);
+    assertThat(surfaceCalls).isEmpty();
+  }
+
+  @Test
+  @Config(minSdk = 26)
+  public void discardSurface_isReusedAndReleasedWithCodec() throws Exception {
+    List<Object> surfaceCalls = new ArrayList<>();
+    MediaCodecVideoRenderer renderer = createInitializedRenderer(true, surfaceCalls);
+    MediaCodecAdapter codec = newTracingCodec();
+
+    for (int i = 0; i < 50; i++) {
+      renderer.skipOutputBuffer(codec, i, /* presentationTimeUs= */ i);
+    }
+
+    // One private surface, one switch; every skipped buffer is rendered to it so it is consumed.
+    assertThat(surfaceCalls).hasSize(1);
+    assertThat(surfaceCalls.get(0)).isSameInstanceAs(lastDiscardSurface);
+    for (Release release : releases) {
+      assertThat(release.render).isTrue();
+      assertThat(release.activeSurface).isSameInstanceAs(lastDiscardSurface);
+    }
+    renderer.stop();
+    renderer.disable();
+    renderer.reset();
+    assertThat(discardSurfaceReleased).isTrue();
+  }
+
+  private static void invokeReleaseFrame(
+      MediaCodecVideoRenderer renderer, MediaCodecAdapter codec, int index, long releaseTimeNs)
+      throws Exception {
+    java.lang.reflect.Field infoField =
+        MediaCodecVideoRenderer.class.getDeclaredField("videoFrameReleaseInfo");
+    infoField.setAccessible(true);
+    Object info = infoField.get(renderer);
+    java.lang.reflect.Field timeField = info.getClass().getDeclaredField("releaseTimeNs");
+    timeField.setAccessible(true);
+    timeField.setLong(info, releaseTimeNs);
+    java.lang.reflect.Method method =
+        MediaCodecVideoRenderer.class.getDeclaredMethod(
+            "releaseFrame", MediaCodecAdapter.class, int.class, long.class, Format.class);
+    method.setAccessible(true);
+    method.invoke(renderer, codec, index, (long) index, VIDEO_H264);
+  }
+
+  /** A codec release recorded together with the output surface that was active at that time. */
+  private static final class Release {
+    final int index;
+    final boolean render;
+    final Surface activeSurface;
+
+    Release(int index, boolean render, Surface activeSurface) {
+      this.index = index;
+      this.render = render;
+      this.activeSurface = activeSurface;
+    }
+  }
+
+  private final List<Release> releases = new ArrayList<>();
+  private Surface activeSurface;
+  private Surface lastDiscardSurface;
+  private boolean discardSurfaceReleased;
+
+  /** Returns a codec that records the active output surface at every release. */
+  private MediaCodecAdapter newTracingCodec() {
+    MediaCodecAdapter codec = mock(MediaCodecAdapter.class);
+    doAnswer(
+            invocation -> {
+              releases.add(
+                  new Release(
+                      invocation.getArgument(0), invocation.getArgument(1), activeSurface));
+              return null;
+            })
+        .when(codec)
+        .releaseOutputBuffer(anyInt(), anyBoolean());
+    doAnswer(
+            invocation -> {
+              releases.add(new Release(invocation.getArgument(0), true, activeSurface));
+              return null;
+            })
+        .when(codec)
+        .releaseOutputBuffer(anyInt(), anyLong());
+    return codec;
+  }
+
+  private Release releaseOf(int index) {
+    for (Release release : releases) {
+      if (release.index == index) {
+        return release;
+      }
+    }
+    throw new AssertionError("Buffer " + index + " was never released");
+  }
+
+  private MediaCodecVideoRenderer createInitializedRenderer(
+      boolean needsWorkaround, List<Object> surfaceCalls) throws Exception {
+    return createInitializedRenderer(needsWorkaround, surfaceCalls, /* videoSink= */ null);
+  }
+
+  private MediaCodecVideoRenderer createInitializedRenderer(
+      boolean needsWorkaround, List<Object> surfaceCalls, @Nullable VideoSink videoSink)
+      throws Exception {
+    MediaCodecVideoRenderer renderer =
+        new MediaCodecVideoRenderer(
+            new MediaCodecVideoRenderer.Builder(ApplicationProvider.getApplicationContext())
+                .setCodecAdapterFactory(codecAdapterFactory)
+                .setMediaCodecSelector(mediaCodecSelector)
+                .setVideoSink(videoSink)
+                .setEnableDecoderFallback(false)) {
+          @Override
+          protected @Capabilities int supportsFormat(
+              MediaCodecSelector mediaCodecSelector, Format format) {
+            return RendererCapabilities.create(C.FORMAT_HANDLED);
+          }
+
+          @Override
+          protected boolean codecNeedsDiscardSurfaceWorkaround(String name) {
+            return needsWorkaround;
+          }
+
+          @Override
+          protected void setOutputSurfaceV23(MediaCodecAdapter codec, Surface surface) {
+            surfaceCalls.add(surface);
+            activeSurface = surface;
+          }
+
+          @Override
+          protected Surface createDiscardSurface(boolean secure) {
+            lastDiscardSurface =
+                new Surface(new SurfaceTexture(/* texName= */ 99)) {
+                  @Override
+                  public boolean isValid() {
+                    return true;
+                  }
+
+                  @Override
+                  public void release() {
+                    discardSurfaceReleased = true;
+                    super.release();
+                  }
+                };
+            return lastDiscardSurface;
+          }
+        };
+    releases.clear();
+    renderer.init(/* index= */ 0, PlayerId.UNSET, Clock.DEFAULT);
+    renderer.handleMessage(Renderer.MSG_SET_VIDEO_OUTPUT, surface);
+    activeSurface = videoSink != null ? videoSink.getInputSurface() : surface;
+    FakeSampleStream fakeSampleStream =
+        new FakeSampleStream(
+            new DefaultAllocator(/* trimOnReset= */ true, /* individualAllocationSize= */ 1024),
+            /* mediaSourceEventDispatcher= */ null,
+            DrmSessionManager.DRM_UNSUPPORTED,
+            new DrmSessionEventListener.EventDispatcher(),
+            /* initialFormat= */ VIDEO_H264,
+            ImmutableList.of(oneByteSample(/* timeUs= */ 0, C.BUFFER_FLAG_KEY_FRAME)));
+    fakeSampleStream.writeData(/* startPositionUs= */ 0);
+    renderer.enable(
+        RendererConfiguration.DEFAULT,
+        new Format[] {VIDEO_H264},
+        fakeSampleStream,
+        /* positionUs= */ 0,
+        /* joining= */ false,
+        /* mayRenderStartOfStream= */ true,
+        /* startPositionUs= */ 0,
+        /* offsetUs= */ 0,
+        new MediaSource.MediaPeriodId(new Object()));
+    renderer.start();
+    for (int i = 0; i < 3; i++) {
+      renderer.render(/* positionUs= */ 0, SystemClock.elapsedRealtime() * 1000);
+      codecAdapterFactory.idleQueueingAndCallbackThreads();
+      ShadowLooper.idleMainLooper();
+    }
+    surfaceCalls.clear();
+    return renderer;
+  }
+
+  private static Surface newValidSurface(int texName) {
+    return new Surface(new SurfaceTexture(texName)) {
+      @Override
+      public boolean isValid() {
+        return true;
+      }
+    };
+  }
+
+  /** Returns a mock {@link VideoSink} whose input surface is {@code inputSurface}. */
+  private static VideoSink createMockVideoSink(Surface inputSurface) throws Exception {
+    VideoSink videoSink = mock(VideoSink.class);
+    when(videoSink.isInitialized()).thenReturn(true);
+    when(videoSink.initialize(any())).thenReturn(true);
+    when(videoSink.getInputSurface()).thenReturn(inputSurface);
+    return videoSink;
+  }
+
+  private static void processOutputBuffer(
+      MediaCodecVideoRenderer renderer,
+      MediaCodecAdapter codec,
+      int index,
+      long presentationTimeUs,
+      boolean isDecodeOnly)
+      throws Exception {
+    renderer.processOutputBuffer(
+        /* positionUs= */ 0,
+        /* elapsedRealtimeUs= */ 0,
+        codec,
+        /* buffer= */ null,
+        index,
+        /* bufferFlags= */ 0,
+        /* sampleCount= */ 1,
+        presentationTimeUs,
+        isDecodeOnly,
+        /* isLastBuffer= */ false,
+        VIDEO_H264);
+  }
+
+  @Test
+  @Config(minSdk = 26)
+  public void videoSink_decodeOnlySkip_isNotRegisteredAndNeverReachesSinkSurface()
+      throws Exception {
+    Surface sinkSurface = newValidSurface(/* texName= */ 2);
+    VideoSink videoSink = createMockVideoSink(sinkSurface);
+    List<Object> surfaceCalls = new ArrayList<>();
+    MediaCodecVideoRenderer renderer = createInitializedRenderer(true, surfaceCalls, videoSink);
+    MediaCodecAdapter codec = newTracingCodec();
+    clearInvocations(videoSink);
+
+    processOutputBuffer(renderer, codec, 1, /* presentationTimeUs= */ 0, /* isDecodeOnly= */ true);
+    processOutputBuffer(renderer, codec, 2, /* presentationTimeUs= */ 1, /* isDecodeOnly= */ true);
+
+    // Decode-only buffers are never registered with the sink.
+    verify(videoSink, never()).handleInputFrame(anyLong(), any());
+    // They are rendered only after the codec moved off the sink input surface.
+    assertThat(surfaceCalls).hasSize(1);
+    assertThat(surfaceCalls.get(0)).isNotSameInstanceAs(sinkSurface);
+    assertThat(surfaceCalls.get(0)).isNotSameInstanceAs(surface);
+    verify(codec).releaseOutputBuffer(1, /* render= */ true);
+    verify(codec).releaseOutputBuffer(2, /* render= */ true);
+    sinkSurface.release();
+  }
+
+  @Test
+  @Config(minSdk = 26)
+  public void videoSink_dropRejectedBeforeRegistration_neverReachesSinkSurface() throws Exception {
+    Surface sinkSurface = newValidSurface(/* texName= */ 2);
+    VideoSink videoSink = createMockVideoSink(sinkSurface);
+    List<Object> surfaceCalls = new ArrayList<>();
+    MediaCodecVideoRenderer renderer = createInitializedRenderer(true, surfaceCalls, videoSink);
+    MediaCodecAdapter codec = newTracingCodec();
+    clearInvocations(videoSink);
+    when(videoSink.handleInputFrame(anyLong(), any()))
+        .thenAnswer(
+            invocation -> {
+              invocation.<VideoSink.VideoFrameHandler>getArgument(1).skip();
+              return true;
+            });
+
+    processOutputBuffer(renderer, codec, 1, /* presentationTimeUs= */ 0, /* isDecodeOnly= */ false);
+
+    // The sink was offered the frame once and rejected it via skip(): the dropped buffer must not
+    // be rendered to the sink input surface.
+    verify(videoSink, times(1)).handleInputFrame(anyLong(), any());
+    assertThat(surfaceCalls).hasSize(1);
+    assertThat(surfaceCalls.get(0)).isNotSameInstanceAs(sinkSurface);
+    verify(codec).releaseOutputBuffer(1, /* render= */ true);
+    assertThat(releaseOf(1).activeSurface).isSameInstanceAs(lastDiscardSurface);
+    sinkSurface.release();
+  }
+
+  @Test
+  @Config(minSdk = 26)
+  public void videoSink_acceptedFrameAfterSkip_restoresSinkSurfaceBeforeRelease()
+      throws Exception {
+    Surface sinkSurface = newValidSurface(/* texName= */ 2);
+    VideoSink videoSink = createMockVideoSink(sinkSurface);
+    List<Object> surfaceCalls = new ArrayList<>();
+    MediaCodecVideoRenderer renderer = createInitializedRenderer(true, surfaceCalls, videoSink);
+    MediaCodecAdapter codec = newTracingCodec();
+    clearInvocations(videoSink);
+    when(videoSink.handleInputFrame(anyLong(), any()))
+        .thenAnswer(
+            invocation -> {
+              invocation.<VideoSink.VideoFrameHandler>getArgument(1).render(1000L);
+              return true;
+            });
+
+    processOutputBuffer(renderer, codec, 1, /* presentationTimeUs= */ 0, /* isDecodeOnly= */ true);
+    processOutputBuffer(renderer, codec, 2, /* presentationTimeUs= */ 1, /* isDecodeOnly= */ false);
+
+    // One registered frame (the decode-only one was not), and its buffer is released only after
+    // the codec output is back on the sink input surface.
+    verify(videoSink, times(1)).handleInputFrame(anyLong(), any());
+    assertThat(surfaceCalls).hasSize(2);
+    assertThat(surfaceCalls.get(1)).isSameInstanceAs(sinkSurface);
+    assertThat(releaseOf(1).activeSurface).isSameInstanceAs(lastDiscardSurface);
+    assertThat(releaseOf(2).activeSurface).isSameInstanceAs(sinkSurface);
+    sinkSurface.release();
+  }
+
+  @Test
+  @Config(minSdk = 26)
+  public void videoSink_seekAndOutputSurfaceReplacement_keepGuarantees() throws Exception {
+    Surface sinkSurface = newValidSurface(/* texName= */ 2);
+    Surface newDisplaySurface = newValidSurface(/* texName= */ 3);
+    VideoSink videoSink = createMockVideoSink(sinkSurface);
+    List<Object> surfaceCalls = new ArrayList<>();
+    MediaCodecVideoRenderer renderer = createInitializedRenderer(true, surfaceCalls, videoSink);
+    MediaCodecAdapter codec = newTracingCodec();
+    clearInvocations(videoSink);
+    when(videoSink.handleInputFrame(anyLong(), any()))
+        .thenAnswer(
+            invocation -> {
+              invocation.<VideoSink.VideoFrameHandler>getArgument(1).render(1000L);
+              return true;
+            });
+
+    processOutputBuffer(renderer, codec, 1, /* presentationTimeUs= */ 0, /* isDecodeOnly= */ true);
+    // Seek, then replace the display surface while the codec outputs to the private surface.
+    renderer.onPositionReset(
+        /* positionUs= */ 0, /* joining= */ false, /* sampleStreamIsResetToKeyFrame= */ true);
+    renderer.handleMessage(Renderer.MSG_SET_VIDEO_OUTPUT, newDisplaySurface);
+    processOutputBuffer(renderer, codec, 2, /* presentationTimeUs= */ 1, /* isDecodeOnly= */ true);
+
+    // The display surface is never given to the codec, and the second discarded buffer
+    // is still not sent to the sink input surface (a single swap in total).
+    assertThat(surfaceCalls).hasSize(1);
+    assertThat(surfaceCalls.get(0)).isNotSameInstanceAs(sinkSurface);
+    assertThat(surfaceCalls.get(0)).isNotSameInstanceAs(newDisplaySurface);
+    verify(videoSink, never()).handleInputFrame(anyLong(), any());
+
+    // An accepted frame restores the sink input surface (not the display surface).
+    processOutputBuffer(renderer, codec, 3, /* presentationTimeUs= */ 2, /* isDecodeOnly= */ false);
+
+    assertThat(surfaceCalls).hasSize(2);
+    assertThat(surfaceCalls.get(1)).isSameInstanceAs(sinkSurface);
+    assertThat(releaseOf(2).activeSurface).isSameInstanceAs(surfaceCalls.get(0));
+    assertThat(releaseOf(3).activeSurface).isSameInstanceAs(sinkSurface);
+    verify(videoSink, times(1)).handleInputFrame(anyLong(), any());
+    sinkSurface.release();
+    newDisplaySurface.release();
+  }
+
+  @Test
+  @Config(minSdk = 26)
+  public void videoSink_unaffectedDecoder_releasesWithoutRenderingOrSwitchingSurfaces()
+      throws Exception {
+    Surface sinkSurface = newValidSurface(/* texName= */ 2);
+    VideoSink videoSink = createMockVideoSink(sinkSurface);
+    List<Object> surfaceCalls = new ArrayList<>();
+    MediaCodecVideoRenderer renderer = createInitializedRenderer(false, surfaceCalls, videoSink);
+    MediaCodecAdapter codec = newTracingCodec();
+    clearInvocations(videoSink);
+    when(videoSink.handleInputFrame(anyLong(), any()))
+        .thenAnswer(
+            invocation -> {
+              VideoSink.VideoFrameHandler handler = invocation.getArgument(1);
+              if (invocation.<Long>getArgument(0) == 5) {
+                handler.skip();
+              } else {
+                handler.render(1000L);
+              }
+              return true;
+            });
+
+    processOutputBuffer(renderer, codec, 1, /* presentationTimeUs= */ 0, /* isDecodeOnly= */ true);
+    processOutputBuffer(renderer, codec, 2, /* presentationTimeUs= */ 5, /* isDecodeOnly= */ false);
+    processOutputBuffer(renderer, codec, 3, /* presentationTimeUs= */ 6, /* isDecodeOnly= */ false);
+
+    verify(codec).releaseOutputBuffer(1, /* render= */ false);
+    verify(codec).releaseOutputBuffer(2, /* render= */ false);
+    verify(codec).releaseOutputBuffer(3, 1000L);
+    verify(videoSink, times(2)).handleInputFrame(anyLong(), any());
+    assertThat(surfaceCalls).isEmpty();
+    sinkSurface.release();
   }
 
   @Test
